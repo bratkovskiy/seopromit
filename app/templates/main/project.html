@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">{{ project.name }}</h1>
+        <div class="flex space-x-3">
+            <a href="{{ url_for('main.dashboard') }}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Назад к проектам
+            </a>
+            <form action="{{ url_for('main.delete_project', id=project.id) }}" method="POST" class="inline"
+                  onsubmit="return confirm('Вы уверены, что хотите удалить этот проект?');">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
+                    Удалить проект
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Информация о проекте</h3>
+        </div>
+        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <dl class="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                <div class="sm:col-span-1">
+                    <dt class="text-sm font-medium text-gray-500">Счетчик Яндекс.Метрики</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ project.yandex_metrika_counter }}</dd>
+                </div>
+                <div class="sm:col-span-1">
+                    <dt class="text-sm font-medium text-gray-500">Хост в Яндекс.Вебмастере</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ project.yandex_webmaster_host }}</dd>
+                </div>
+                <div class="sm:col-span-1">
+                    <dt class="text-sm font-medium text-gray-500">Дата создания</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ project.created_at.strftime('%d.%m.%Y') }}</dd>
+                </div>
+                <div class="sm:col-span-1">
+                    <dt class="text-sm font-medium text-gray-500">Последнее обновление</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ project.updated_at.strftime('%d.%m.%Y') }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- Ключевые слова -->
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Ключевые слова</h3>
+                <a href="{{ url_for('main.project_keywords', id=project.id) }}"
+                   class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    Управление
+                </a>
+            </div>
+            <div class="border-t border-gray-200">
+                <div class="px-4 py-5 sm:px-6">
+                    {% if project.keywords %}
+                    <div class="flow-root">
+                        <ul class="-my-5 divide-y divide-gray-200">
+                            {% for keyword in project.keywords[:5] %}
+                            <li class="py-4">
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 truncate">
+                                            {{ keyword.keyword }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% if project.keywords|length > 5 %}
+                        <div class="mt-6">
+                            <a href="{{ url_for('main.project_keywords', id=project.id) }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                                Показать все {{ project.keywords|length }} ключевых слов
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">Ключевые слова пока не добавлены</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- URLs -->
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">URLs</h3>
+                <a href="{{ url_for('main.project_urls', id=project.id) }}"
+                   class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    Управление
+                </a>
+            </div>
+            <div class="border-t border-gray-200">
+                <div class="px-4 py-5 sm:px-6">
+                    {% if project.urls %}
+                    <div class="flow-root">
+                        <ul class="-my-5 divide-y divide-gray-200">
+                            {% for url in project.urls[:5] %}
+                            <li class="py-4">
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 truncate">
+                                            {{ url.url }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% if project.urls|length > 5 %}
+                        <div class="mt-6">
+                            <a href="{{ url_for('main.project_urls', id=project.id) }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                                Показать все {{ project.urls|length }} URL
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">URLs пока не добавлены</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

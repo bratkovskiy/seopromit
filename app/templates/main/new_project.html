@@ -7,12 +7,12 @@
         
         <div class="bg-white shadow sm:rounded-lg">
             <div class="px-4 py-5 sm:p-6">
-                <form method="POST" action="">
+                <form method="POST" action="" id="projectForm">
                     {{ form.hidden_tag() }}
                     
                     <div class="space-y-6">
                         <div>
-                            {{ form.name.label(class="block text-sm font-medium text-gray-700", text="Название проекта") }}
+                            {{ form.name.label(class="block text-sm font-medium text-gray-700") }}
                             {{ form.name(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
                             {% for error in form.name.errors %}
                             <p class="mt-2 text-sm text-red-600">{{ error }}</p>
@@ -30,12 +30,23 @@
                                 <div class="mt-5 md:mt-0 md:col-span-2">
                                     <div class="grid grid-cols-6 gap-6">
                                         <div class="col-span-6">
-                                            {{ form.yandex_metrika_counter.label(class="block text-sm font-medium text-gray-700", text="ID счетчика Яндекс.Метрики") }}
+                                            {{ form.yandex_metrika_counter.label(class="block text-sm font-medium text-gray-700") }}
                                             {{ form.yandex_metrika_counter(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                                            {% for error in form.yandex_metrika_counter.errors %}
+                                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                                            {% endfor %}
                                         </div>
                                         <div class="col-span-6">
-                                            {{ form.yandex_metrika_token.label(class="block text-sm font-medium text-gray-700", text="Токен Яндекс.Метрики") }}
+                                            {{ form.yandex_metrika_token.label(class="block text-sm font-medium text-gray-700") }}
                                             {{ form.yandex_metrika_token(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                                            {% for error in form.yandex_metrika_token.errors %}
+                                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="col-span-6">
+                                            {{ form.validate_metrika(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500") }}
+                                            <span id="metrikaStatus" class="ml-2 text-sm"></span>
+                                            {{ form.metrika_validated }}
                                         </div>
                                     </div>
                                 </div>
@@ -53,8 +64,30 @@
                                 <div class="mt-5 md:mt-0 md:col-span-2">
                                     <div class="grid grid-cols-6 gap-6">
                                         <div class="col-span-6">
-                                            {{ form.yandex_webmaster_host.label(class="block text-sm font-medium text-gray-700", text="Хост в Яндекс.Вебмастере") }}
+                                            {{ form.yandex_webmaster_host.label(class="block text-sm font-medium text-gray-700") }}
                                             {{ form.yandex_webmaster_host(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                                            {% for error in form.yandex_webmaster_host.errors %}
+                                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="col-span-6">
+                                            {{ form.yandex_webmaster_token.label(class="block text-sm font-medium text-gray-700") }}
+                                            {{ form.yandex_webmaster_token(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                                            {% for error in form.yandex_webmaster_token.errors %}
+                                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="col-span-6">
+                                            {{ form.yandex_webmaster_user_id.label(class="block text-sm font-medium text-gray-700") }}
+                                            {{ form.yandex_webmaster_user_id(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                                            {% for error in form.yandex_webmaster_user_id.errors %}
+                                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="col-span-6 flex items-center justify-end">
+                                            {{ form.validate_webmaster(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500") }}
+                                            <span id="webmasterStatus" class="ml-2 text-sm"></span>
+                                            {{ form.webmaster_validated }}
                                         </div>
                                     </div>
                                 </div>
@@ -67,11 +100,105 @@
                            class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                             Отмена
                         </a>
-                        {{ form.submit(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500", value="Создать") }}
+                        {{ form.submit(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50", disabled=True) }}
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('projectForm');
+    const submitBtn = form.querySelector('input[type="submit"][value="Создать проект"]');
+    const metrikaValidated = document.getElementById('metrika_validated');
+    const webmasterValidated = document.getElementById('webmaster_validated');
+    const metrikaStatus = document.getElementById('metrikaStatus');
+    const webmasterStatus = document.getElementById('webmasterStatus');
+
+    // Функция проверки возможности создания проекта
+    function checkSubmitAvailability() {
+        if (metrikaValidated.value === 'true' && webmasterValidated.value === 'true') {
+            submitBtn.disabled = false;
+        } else {
+            submitBtn.disabled = true;
+        }
+    }
+
+    // Обработчик для валидации Метрики
+    form.querySelector('input[value="Проверить Яндекс.Метрику"]').addEventListener('click', function(e) {
+        e.preventDefault();
+        const counter = document.getElementById('yandex_metrika_counter').value;
+        const token = document.getElementById('yandex_metrika_token').value;
+
+        fetch('/validate_metrika', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                counter: counter,
+                token: token
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                metrikaStatus.textContent = '✓ ' + data.message;
+                metrikaStatus.className = 'ml-2 text-sm text-green-600';
+                metrikaValidated.value = 'true';
+            } else {
+                metrikaStatus.textContent = '✗ ' + data.message;
+                metrikaStatus.className = 'ml-2 text-sm text-red-600';
+                metrikaValidated.value = 'false';
+            }
+            checkSubmitAvailability();
+        });
+    });
+
+    // Обработчик для валидации Вебмастера
+    form.querySelector('input[value="Проверить Яндекс.Вебмастер"]').addEventListener('click', function(e) {
+        e.preventDefault();
+        const host = document.getElementById('yandex_webmaster_host').value;
+        const token = document.getElementById('yandex_webmaster_token').value;
+        const user_id = document.getElementById('yandex_webmaster_user_id').value;
+
+        if (!host || !token || !user_id) {
+            webmasterStatus.textContent = '✗ Заполните все поля';
+            webmasterStatus.className = 'ml-2 text-sm text-red-600';
+            webmasterValidated.value = 'false';
+            return;
+        }
+
+        fetch('/validate_webmaster', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                host: host,
+                token: token,
+                user_id: user_id
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                webmasterStatus.textContent = '✓ ' + data.message;
+                webmasterStatus.className = 'ml-2 text-sm text-green-600';
+                webmasterValidated.value = 'true';
+            } else {
+                webmasterStatus.textContent = '✗ ' + data.message;
+                webmasterStatus.className = 'ml-2 text-sm text-red-600';
+                webmasterValidated.value = 'false';
+            }
+            checkSubmitAvailability();
+        });
+    });
+
+    // Начальная проверка доступности кнопки создания
+    checkSubmitAvailability();
+});
+</script>
 {% endblock %}
