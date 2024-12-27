@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-6">Редактирование пользователя {{ user.username }}</h1>
+        
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <form method="POST" action="">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="space-y-6">
+                        <div>
+                            {{ form.email.label(class="block text-sm font-medium text-gray-700") }}
+                            {{ form.email(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                            {% for error in form.email.errors %}
+                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+
+                        <div>
+                            {{ form.role.label(class="block text-sm font-medium text-gray-700") }}
+                            {{ form.role(class="mt-1 block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 rounded-md") }}
+                            {% for error in form.role.errors %}
+                            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <a href="{{ url_for('auth.users') }}"
+                           class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Отмена
+                        </a>
+                        {{ form.submit(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

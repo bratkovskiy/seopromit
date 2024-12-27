@@ -1,0 +1,14 @@
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+Flask-Migrate==4.0.5
+python-dotenv==1.0.0
+mysqlclient==2.2.1
+requests==2.31.0
+bcrypt==4.1.2
+hvac==2.0.0
+WTForms==3.1.1
+pandas==2.1.4
+openpyxl==3.1.2
+plotly==5.18.0
