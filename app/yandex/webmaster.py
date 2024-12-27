@@ -44,20 +44,40 @@ class YandexWebmasterAPI:
         logger.info(f"Получение host_id для {host_url}")
         
         # Нормализуем URL
-        if host_url.startswith('https:') and not host_url.startswith('https://'):
-            host_url = 'https://' + host_url[6:]
         if ':443' in host_url:
             host_url = host_url.replace(':443', '')
+        if not host_url.startswith('https://'):
+            host_url = 'https://' + host_url.replace('https:', '')
+        if host_url.endswith('/'):
+            host_url = host_url[:-1]
         logger.info(f"Нормализованный URL: {host_url}")
         
-        # В рабочем скрипте host_id берется напрямую из таблицы
-        # Здесь мы просто возвращаем последнюю часть URL как host_id
-        if '/' in host_url:
-            host_id = host_url.split('/')[-1]
-            logger.info(f"Используем host_id: {host_id}")
-            return host_id
+        # Получаем список хостов через API
+        endpoint = f"/user/{self.user_id}/hosts"
+        data = self._make_request("GET", endpoint)
+        logger.info(f"Получен список хостов: {data}")
+        
+        if not data or 'hosts' not in data:
+            logger.error(f"Не удалось получить список хостов")
+            return None
             
-        logger.error(f"Не удалось получить host_id для {host_url}")
+        # Ищем наш хост
+        for host in data['hosts']:
+            api_host_url = host.get('ascii_host_url', '')
+            if ':443' in api_host_url:
+                api_host_url = api_host_url.replace(':443', '')
+            if not api_host_url.startswith('https://'):
+                api_host_url = 'https://' + api_host_url.replace('https:', '')
+            if api_host_url.endswith('/'):
+                api_host_url = api_host_url[:-1]
+                
+            logger.info(f"Сравниваем {api_host_url} с {host_url}")
+            if api_host_url == host_url:
+                host_id = host['host_id']
+                logger.info(f"Найден host_id: {host_id}")
+                return host_id
+                
+        logger.error(f"Хост {host_url} не найден в списке хостов")
         return None
     
     def get_keyword_position(self, host_id: str, query: str) -> Tuple[Optional[float], Optional[str]]:
@@ -70,7 +90,7 @@ class YandexWebmasterAPI:
         
         url = f"/user/{self.user_id}/hosts/{host_id}/query-analytics/list"
         params = {
-            "operation": "TEXT_CONTAINS",
+            "operation": "GET_QUERY_ANALYTICS",
             "limit": "500",
             "filters": {
                 "text_filters": [
@@ -88,13 +108,26 @@ class YandexWebmasterAPI:
             }
         }
         
+        logger.info(f"Отправка запроса к API Вебмастера: {url}")
+        logger.info(f"Параметры запроса: {params}")
         data = self._make_request("POST", url, json=params)
-        if not data or 'text_indicator_to_statistics' not in data:
-            logger.warning(f"Нет данных по запросу '{query}' в ответе API")
+        logger.info(f"Ответ от API: {data}")
+        
+        if not data:
+            logger.warning(f"Пустой ответ от API для запроса '{query}'")
+            return None, None
+            
+        if 'error' in data:
+            logger.error(f"Ошибка от API: {data['error']}")
+            return None, None
+            
+        if 'text_indicator_to_statistics' not in data:
+            logger.warning(f"В ответе API нет данных о позициях для запроса '{query}'")
             return None, None
             
         positions = [stat for stat in data['text_indicator_to_statistics']
                     if stat['text_indicator']['value'] == query]
+        logger.info(f"Найдено {len(positions)} записей для запроса '{query}'")
                     
         if not positions:
             logger.warning(f"Позиция для запроса '{query}' не найдена в данных API")
@@ -102,6 +135,7 @@ class YandexWebmasterAPI:
             
         position_data = positions[0]['statistics']
         position_entries = [entry for entry in position_data if entry['field'] == 'POSITION']
+        logger.info(f"Найдено {len(position_entries)} записей о позициях для запроса '{query}'")
         
         if not position_entries:
             logger.warning(f"Нет данных о позициях для запроса '{query}'")
@@ -110,16 +144,18 @@ class YandexWebmasterAPI:
         # Берем последние 7 дней и считаем среднее
         position_entries_sorted = sorted(position_entries, key=lambda x: x['date'], reverse=True)[:7]
         positions_values = [entry['value'] for entry in position_entries_sorted]
+        logger.info(f"Позиции за последние 7 дней для '{query}': {positions_values}")
         
         if not positions_values:
             logger.warning(f"Нет значений позиций для запроса '{query}'")
             return None, None
             
         position_avg = np.mean(positions_values)
-        date_range = f"{start_date.strftime('%d.%m')} - {end_date.strftime('%d.%m')}"
+        # Берем дату последней позиции
+        last_date = position_entries_sorted[0]['date'] if position_entries_sorted else end_date.strftime('%Y-%m-%d')
         
-        logger.info(f"Средняя позиция для '{query}': {position_avg} за период {date_range}")
-        return position_avg, date_range
+        logger.info(f"Средняя позиция для '{query}': {position_avg} за дату {last_date}")
+        return position_avg, last_date
 
     def validate_host(self, host_url: str) -> Tuple[bool, str]:
         """
@@ -184,8 +220,15 @@ class YandexWebmasterAPI:
         """
         logger.info(f"Получение позиций для {len(keywords)} ключевых слов на хосте {host_url}")
         
+        if not keywords:
+            logger.warning("Пустой список ключевых слов")
+            return {}
+            
         # Сначала получаем host_id
+        logger.info(f"Получаем host_id для {host_url}")
         host_id = self.get_host_id(host_url)
+        logger.info(f"Получен host_id: {host_id}")
+        
         if not host_id:
             logger.error(f"Не удалось получить host_id для {host_url}")
             return {}
@@ -193,10 +236,13 @@ class YandexWebmasterAPI:
         # Получаем позиции для каждого ключевого слова
         results = {}
         for keyword in keywords:
+            logger.info(f"Получаем позицию для ключевого слова '{keyword}'")
             position, date = self.get_keyword_position(host_id, keyword)
+            logger.info(f"Получена позиция для '{keyword}': позиция={position}, дата={date}")
             if position is not None:
                 results[keyword] = (position, date)
             else:
-                logger.warning(f"Не удалось получить позицию для '{keyword}'")
+                logger.warning(f"Не удалось получить позицию для ключевого слова '{keyword}'")
                 
+        logger.info(f"Получены позиции для {len(results)} из {len(keywords)} ключевых слов")
         return results

@@ -431,17 +431,23 @@ def refresh_project_data(id):
         # Обновляем данные по ключевым словам
         current_app.logger.info(f"Updating keyword data for project {id}")
         keywords_list = [(kw.keyword, kw) for kw in project.keywords]
+        current_app.logger.info(f"Got {len(keywords_list)} keywords: {[kw for kw, _ in keywords_list]}")
+        
         positions = webmaster_api.get_keywords_positions(project.yandex_webmaster_host, [kw for kw, _ in keywords_list])
+        current_app.logger.info(f"Got positions from API: {positions}")
         
         for keyword_text, keyword in keywords_list:
             try:
                 if keyword_text in positions:
-                    position, date = positions[keyword_text]
+                    position, webmaster_date = positions[keyword_text]
+                    current_app.logger.info(f"Creating KeywordPosition: keyword_id={keyword.id}, position={position}, webmaster_date={webmaster_date}")
                     keyword_position = KeywordPosition(
                         keyword_id=keyword.id,
                         position=position,
-                        date=date
+                        check_date=datetime.utcnow(),
+                        data_date=datetime.strptime(webmaster_date, '%Y-%m-%d')
                     )
+                    current_app.logger.info(f"Adding KeywordPosition to session: {keyword_position}")
                     db.session.add(keyword_position)
                     keyword.last_webmaster_update = datetime.utcnow()
                     current_app.logger.info(f"Updated position for keyword {keyword_text}: {position}")
@@ -486,9 +492,15 @@ def refresh_project_data(id):
                 continue
 
         # Сохраняем все изменения
-        db.session.commit()
-        current_app.logger.info(f"Successfully updated all data for project {id}")
-        flash('Данные успешно обновлены', 'success')
+        try:
+            current_app.logger.info("Committing changes to database...")
+            db.session.commit()
+            current_app.logger.info(f"Successfully updated all data for project {id}")
+            flash('Данные успешно обновлены', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error committing changes: {str(e)}")
+            db.session.rollback()
+            flash('Ошибка при сохранении данных', 'error')
         
         return redirect(url_for('main.project', id=id))
 
