@@ -5,9 +5,9 @@ from datetime import datetime
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128))
+    username = db.Column(db.String(64), index=True, unique=True)
+    email = db.Column(db.String(120), index=True, unique=True)
+    password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), default='user')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -43,16 +43,34 @@ class Project(db.Model):
     keywords = db.relationship('Keyword', backref='project', lazy=True, cascade='all, delete-orphan')
     urls = db.relationship('URL', backref='project', lazy=True, cascade='all, delete-orphan')
 
+class Region(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    yandex_id = db.Column(db.Integer, unique=True, nullable=False)  # ID региона в Яндекс.Вебмастере
+    name = db.Column(db.String(100), nullable=False)  # Название региона
+    
+    # Отношения
+    keywords = db.relationship('Keyword', backref='region', lazy=True)
+
+    def __repr__(self):
+        return f'<Region {self.name}>'
+
 class Keyword(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     keyword = db.Column(db.String(200), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    region_id = db.Column(db.Integer, db.ForeignKey('region.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_webmaster_update = db.Column(db.DateTime)  # Дата последнего получения данных из Вебмастера
     positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic')
 
 class URL(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(500), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_metrika_update = db.Column(db.DateTime)  # Дата последнего получения данных из Метрики
     traffic_data = db.relationship('URLTraffic', backref='url', lazy='dynamic')
 
 class KeywordPosition(db.Model):

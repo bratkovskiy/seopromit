@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Ключевые слова</h1>
+            <p class="mt-1 text-sm text-gray-500">
+                Проект: {{ project.name }}
+            </p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="{{ url_for('main.project', id=project.id) }}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Назад к проекту
+            </a>
+            <form action="{{ url_for('main.clear_all_keywords', project_id=project.id) }}" 
+                  method="POST"
+                  class="inline"
+                  onsubmit="return confirm('Вы уверены, что хотите удалить ВСЕ ключевые слова?');">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
+                    Очистить все
+                </button>
+            </form>
+            <button type="button"
+                    onclick="document.getElementById('addKeywordModal').classList.remove('hidden')"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                Добавить ключевое слово
+            </button>
+        </div>
+    </div>
+
+    <!-- Список ключевых слов -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">
+                Все ключевые слова ({{ keywords|length }})
+            </h3>
+        </div>
+        {% if keywords %}
+        <div class="border-t border-gray-200">
+            <ul class="divide-y divide-gray-200">
+                {% for keyword in keywords %}
+                <li class="px-4 py-4 sm:px-6 flex items-center justify-between">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900">
+                            {{ keyword.keyword }}
+                        </p>
+                        {% if keyword.positions and keyword.positions.count() > 0 %}
+                            {% set last_position = keyword.positions.order_by(KeywordPosition.check_date.desc()).first() %}
+                            {% if last_position %}
+                            <p class="mt-1 text-sm text-gray-500">
+                                Последняя позиция: {{ last_position.position }}
+                                ({{ last_position.check_date.strftime('%d.%m.%Y') }})
+                            </p>
+                            {% endif %}
+                        {% else %}
+                            <p class="mt-1 text-sm text-gray-500">
+                                Позиции пока не проверялись
+                            </p>
+                        {% endif %}
+                        <p class="mt-1 text-sm text-gray-500">
+                            Регион: {{ keyword.region.name }}
+                        </p>
+                    </div>
+                    <div class="ml-4 flex-shrink-0">
+                        <form action="{{ url_for('main.delete_keyword', project_id=project.id, keyword_id=keyword.id) }}" 
+                              method="POST"
+                              class="inline"
+                              onsubmit="return confirm('Вы уверены, что хотите удалить это ключевое слово?');">
+                            <button type="submit" 
+                                    class="text-red-600 hover:text-red-900">
+                                Удалить
+                            </button>
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="px-4 py-5 sm:px-6 text-center text-gray-500">
+            Ключевые слова пока не добавлены
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно добавления ключевого слова -->
+<div id="addKeywordModal" class="hidden fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+            <div>
+                <div class="mt-3 text-center sm:mt-5">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                        Добавить ключевое слово
+                    </h3>
+                    <div class="mt-2">
+                        <form action="{{ url_for('main.add_keyword', project_id=project.id) }}" method="POST">
+                            <div>
+                                <label for="region_id" class="block text-sm font-medium text-gray-700">
+                                    Регион
+                                </label>
+                                <div class="mt-1">
+                                    <select name="region_id" id="region_id" required
+                                           class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md">
+                                        <option value="">Выберите регион</option>
+                                        {% for region in regions %}
+                                        <option value="{{ region.id }}">{{ region.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mt-4">
+                                <label for="keywords" class="block text-sm font-medium text-gray-700">
+                                    Ключевые слова
+                                </label>
+                                <div class="mt-1">
+                                    <textarea name="keywords" id="keywords" rows="10" required
+                                           class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                           placeholder="Введите ключевые слова, каждое с новой строки"></textarea>
+                                    <p class="mt-2 text-sm text-gray-500">
+                                        Введите каждое ключевое слово с новой строки
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                                <button type="submit"
+                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:col-start-2 sm:text-sm">
+                                    Добавить
+                                </button>
+                                <button type="button"
+                                        onclick="document.getElementById('addKeywordModal').classList.add('hidden')"
+                                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:col-start-1 sm:text-sm">
+                                    Отмена
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
