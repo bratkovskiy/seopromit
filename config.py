@@ -15,3 +15,26 @@ class Config:
     
     # App settings
     APP_NAME = os.environ.get('APP_NAME', 'PROMIT SEO')
+    
+    # Настройка логирования
+    LOGGING_CONFIG = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'default': {
+                'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            }
+        },
+        'handlers': {
+            'file': {
+                'class': 'logging.FileHandler',
+                'filename': 'app.log',
+                'formatter': 'default',
+                'encoding': 'utf-8'
+            }
+        },
+        'root': {
+            'level': 'INFO',
+            'handlers': ['file']
+        }
+    }

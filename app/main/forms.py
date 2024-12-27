@@ -4,11 +4,11 @@ from wtforms.validators import DataRequired, Length, URL, Optional
 
 class ProjectForm(FlaskForm):
     name = StringField('Название проекта', validators=[DataRequired(), Length(max=100)])
-    yandex_metrika_counter = StringField('ID счетчика Яндекс.Метрики', validators=[DataRequired()])
-    yandex_metrika_token = StringField('Токен Яндекс.Метрики', validators=[DataRequired()])
-    yandex_webmaster_host = StringField('Хост в Яндекс.Вебмастере', validators=[DataRequired()])
-    yandex_webmaster_token = StringField('Токен Яндекс.Вебмастера', validators=[DataRequired()])
-    yandex_webmaster_user_id = StringField('User ID Яндекс.Вебмастера', validators=[DataRequired()])
+    yandex_metrika_counter = StringField('ID счетчика Яндекс.Метрики', validators=[DataRequired(), Length(max=50)])
+    yandex_metrika_token = StringField('Токен Яндекс.Метрики', validators=[DataRequired(), Length(max=100)])
+    yandex_webmaster_host = StringField('Хост в Яндекс.Вебмастере', validators=[DataRequired(), Length(max=200)])
+    yandex_webmaster_token = StringField('Токен Яндекс.Вебмастера', validators=[DataRequired(), Length(max=100)])
+    yandex_webmaster_user_id = StringField('User ID Яндекс.Вебмастера', validators=[DataRequired(), Length(max=50)])
     
     # Скрытые поля для хранения статуса валидации
     metrika_validated = HiddenField('Метрика проверена', default='false')

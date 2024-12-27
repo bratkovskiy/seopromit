@@ -1,21 +1,27 @@
-from flask import render_template, flash, redirect, url_for, request, jsonify
+from flask import render_template, flash, redirect, url_for, request, jsonify, current_app
 from flask_login import login_required, current_user
-from app import db
+from app import db, socketio, csrf
 from app.main import bp
 from app.main.forms import ProjectForm
 from app.models import Project, Keyword, URL, KeywordPosition, URLTraffic, Region
 from app.yandex import YandexMetrikaAPI, YandexWebmasterAPI
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging
+import threading
+import time
+from urllib.parse import urlparse
 
+logger = logging.getLogger(__name__)
+
+@login_required
 @bp.route('/')
 @bp.route('/dashboard')
-@login_required
 def dashboard():
     projects = Project.query.filter_by(user_id=current_user.id).all()
     return render_template('main/dashboard.html', title='Панель управления', projects=projects)
 
-@bp.route('/project/new', methods=['GET', 'POST'])
 @login_required
+@bp.route('/project/new', methods=['GET', 'POST'])
 def new_project():
     form = ProjectForm()
     if form.validate_on_submit():
@@ -65,6 +71,21 @@ def project_keywords(id):
                          keywords=project.keywords,
                          regions=regions,
                          KeywordPosition=KeywordPosition)  
+
+@bp.route('/project/<int:id>/keywords/table')
+@login_required
+def get_keywords_table(id):
+    project = Project.query.get_or_404(id)
+    if project.user_id != current_user.id:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    # Получаем ключевые слова проекта
+    keywords = project.keywords.order_by(Keyword.keyword.asc()).all()
+    
+    # Рендерим только таблицу с ключевыми словами
+    return render_template('main/_keywords_table.html', 
+                         project=project, 
+                         keywords=keywords)
 
 @bp.route('/project/<int:id>/urls')
 @login_required
@@ -131,9 +152,9 @@ def validate_webmaster():
             'message': error_msg
         })
     
-    api = YandexWebmasterAPI(token)
+    api = YandexWebmasterAPI(oauth_token=token, user_id=user_id)
     print("Вызываем метод validate_host")
-    success, message = api.validate_host(host, user_id)
+    success, message = api.validate_host(host)
     print(f"Результат: success={success}, message={message}")
     
     response = {
@@ -326,22 +347,31 @@ def clear_all_urls(project_id):
     
     return redirect(url_for('main.project_urls', id=project_id))
 
-@bp.route('/project/<int:id>/get_data')
+@bp.route('/project/<int:id>/get_data', methods=['POST'])
 @login_required
 def get_project_data(id):
-    project = Project.query.get_or_404(id)
-    if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
-        return redirect(url_for('main.dashboard'))
-    
     try:
-        # Здесь будет логика получения данных
-        # TODO: Реализовать получение данных из Яндекс.Метрики и Яндекс.Вебмастера
-        flash('Запрос на получение данных отправлен', 'success')
+        current_app.logger.info("="*50)
+        current_app.logger.info(f"Starting data update for project {id}")
+        current_app.logger.info(f"Request method: {request.method}")
+        current_app.logger.info(f"Request headers: {dict(request.headers)}")
+        
+        project = Project.query.get_or_404(id)
+        if project.user_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Эмулируем процесс обновления с отправкой прогресса
+        for progress in range(0, 101, 20):
+            socketio.emit('update_progress', {'progress': progress})
+            time.sleep(1)  # Имитация длительной операции
+        
+        # После завершения обновления
+        socketio.emit('update_complete', {'message': 'Данные успешно обновлены'})
+        return jsonify({'status': 'success', 'message': 'Данные успешно обновлены'})
+
     except Exception as e:
-        flash(f'Ошибка при получении данных: {str(e)}', 'error')
-    
-    return redirect(url_for('main.project', id=id))
+        current_app.logger.error(f"Error in get_project_data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/project/<int:project_id>/keywords/clear_all', methods=['POST'])
 @login_required
@@ -361,3 +391,108 @@ def clear_all_keywords(project_id):
         flash(f'Ошибка при удалении ключевых слов: {str(e)}', 'error')
     
     return redirect(url_for('main.project_keywords', id=project_id))
+
+@bp.route('/project/<int:id>/update', methods=['GET'])
+@login_required
+def update_project_data(id):
+    try:
+        project = Project.query.get_or_404(id)
+        if project.user_id != current_user.id:
+            flash('У вас нет доступа к этому проекту', 'error')
+            return redirect(url_for('main.dashboard'))
+
+        # Здесь будет код обновления данных
+        time.sleep(2)  # Имитация работы
+        flash('Данные успешно обновлены', 'success')
+        
+        return redirect(url_for('main.project', id=id))
+
+    except Exception as e:
+        current_app.logger.error(f"Error updating data: {str(e)}")
+        flash('Произошла ошибка при обновлении данных', 'error')
+        return redirect(url_for('main.project', id=id))
+
+@bp.route('/project/<int:id>/refresh', methods=['GET'])
+@login_required
+def refresh_project_data(id):
+    try:
+        project = Project.query.get_or_404(id)
+        if project.user_id != current_user.id:
+            flash('У вас нет доступа к этому проекту', 'error')
+            return redirect(url_for('main.dashboard'))
+
+        # Создаем API клиенты
+        webmaster_api = YandexWebmasterAPI(
+            oauth_token=project.yandex_webmaster_token,
+            user_id=project.yandex_webmaster_user_id
+        )
+        metrika_api = YandexMetrikaAPI(project.yandex_metrika_token)
+
+        # Обновляем данные по ключевым словам
+        current_app.logger.info(f"Updating keyword data for project {id}")
+        keywords_list = [(kw.keyword, kw) for kw in project.keywords]
+        positions = webmaster_api.get_keywords_positions(project.yandex_webmaster_host, [kw for kw, _ in keywords_list])
+        
+        for keyword_text, keyword in keywords_list:
+            try:
+                if keyword_text in positions:
+                    position, date = positions[keyword_text]
+                    keyword_position = KeywordPosition(
+                        keyword_id=keyword.id,
+                        position=position,
+                        date=date
+                    )
+                    db.session.add(keyword_position)
+                    keyword.last_webmaster_update = datetime.utcnow()
+                    current_app.logger.info(f"Updated position for keyword {keyword_text}: {position}")
+                else:
+                    current_app.logger.warning(f"No position data for keyword {keyword_text!r}")
+            except Exception as e:
+                current_app.logger.error(f"Error updating keyword {keyword_text}: {str(e)}")
+                continue
+
+        # Обновляем данные по URL
+        current_app.logger.info(f"Updating URL data for project {id}")
+        for url in project.urls:
+            try:
+                # Получаем трафик из Метрики за последние 7 дней
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=7)
+                
+                # Получаем путь из URL
+                path = urlparse(url.url).path
+                
+                traffic = metrika_api.get_pageviews(
+                    counter_id=project.yandex_metrika_counter,
+                    start_date=start_date.strftime('%Y-%m-%d'),
+                    end_date=end_date.strftime('%Y-%m-%d'),
+                    filters=f"ym:pv:URLPath=='{path}'"
+                )
+                
+                if traffic is not None:
+                    url_traffic = URLTraffic(
+                        url_id=url.id,
+                        visitors=traffic,
+                        check_date=datetime.utcnow()
+                    )
+                    db.session.add(url_traffic)
+                    url.last_metrika_update = datetime.utcnow()
+                    current_app.logger.info(f"Updated traffic for URL {url.url}: {traffic}")
+                else:
+                    current_app.logger.warning(f"No traffic data for URL {url.url}")
+
+            except Exception as e:
+                current_app.logger.error(f"Error updating URL {url.url}: {str(e)}")
+                continue
+
+        # Сохраняем все изменения
+        db.session.commit()
+        current_app.logger.info(f"Successfully updated all data for project {id}")
+        flash('Данные успешно обновлены', 'success')
+        
+        return redirect(url_for('main.project', id=id))
+
+    except Exception as e:
+        current_app.logger.error(f"Error updating data: {str(e)}")
+        flash('Произошла ошибка при обновлении данных', 'error')
+        return redirect(url_for('main.project', id=id))

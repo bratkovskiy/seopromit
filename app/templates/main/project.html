@@ -9,13 +9,6 @@
                class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                 Назад к проектам
             </a>
-            <form action="{{ url_for('main.delete_project', id=project.id) }}" method="POST" class="inline"
-                  onsubmit="return confirm('Вы уверены, что хотите удалить этот проект?');">
-                <button type="submit" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
-                    Удалить проект
-                </button>
-            </form>
         </div>
     </div>
 
@@ -33,14 +26,6 @@
                     <dt class="text-sm font-medium text-gray-500">Хост в Яндекс.Вебмастере</dt>
                     <dd class="mt-1 text-sm text-gray-900">{{ project.yandex_webmaster_host }}</dd>
                 </div>
-                <div class="sm:col-span-1">
-                    <dt class="text-sm font-medium text-gray-500">Дата создания</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ project.created_at.strftime('%d.%m.%Y') }}</dd>
-                </div>
-                <div class="sm:col-span-1">
-                    <dt class="text-sm font-medium text-gray-500">Последнее обновление</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ project.updated_at.strftime('%d.%m.%Y') }}</dd>
-                </div>
             </dl>
         </div>
     </div>
@@ -51,18 +36,10 @@
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">Ключевые слова</h3>
                 <div class="flex space-x-2">
-                    {% if project.keywords %}
-                    <a href="{{ url_for('main.get_project_data', id=project.id) }}"
+                    <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Получить данные
+                        Обновить данные
                     </a>
-                    {% else %}
-                    <button disabled
-                            class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-gray-400 cursor-not-allowed"
-                            title="Добавьте хотя бы одно ключевое слово">
-                        Получить данные
-                    </button>
-                    {% endif %}
                     <a href="{{ url_for('main.project_keywords', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                         Управление
@@ -124,18 +101,10 @@
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">URLs</h3>
                 <div class="flex space-x-2">
-                    {% if project.urls %}
-                    <a href="{{ url_for('main.get_project_data', id=project.id) }}"
+                    <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Получить данные
+                        Обновить данные
                     </a>
-                    {% else %}
-                    <button disabled
-                            class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-gray-400 cursor-not-allowed"
-                            title="Добавьте хотя бы один URL">
-                        Получить данные
-                    </button>
-                    {% endif %}
                     <a href="{{ url_for('main.project_urls', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                         Управление
@@ -179,6 +148,10 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="keywords-table">
+        {{ keywords_table|safe }}
     </div>
 </div>
 {% endblock %}

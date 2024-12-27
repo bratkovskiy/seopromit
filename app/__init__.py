@@ -6,35 +6,39 @@ from config import Config
 import hvac
 import logging
 import os
+from flask_socketio import SocketIO
+from flask_wtf.csrf import CSRFProtect
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 migrate = Migrate()
+socketio = SocketIO()
+csrf = CSRFProtect()
 
-def create_app():
+def create_app(config_class=Config):
     app = Flask(__name__)
-    app.config.from_object(Config)
+    app.config.from_object(config_class)
     
-    # Настройка логирования в файл
-    log_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'app.log')
+    # Конфигурация логирования
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()  # Также выводим в консоль
+            logging.FileHandler('app.log', encoding='utf-8'),
+            logging.StreamHandler()  # Добавляем вывод в консоль
         ]
     )
-    app.logger.info(f"Логи будут сохраняться в: {log_file}")
     
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
     migrate.init_app(app, db)
+    socketio.init_app(app)
+    csrf.init_app(app)
     
     # Set up login configuration
     login_manager.login_view = 'auth.login'
-    login_manager.login_message_category = 'info'
+    login_manager.login_message = 'Пожалуйста, войдите для доступа к этой странице.'
     
     # Initialize Vault client
     vault_client = hvac.Client(
@@ -43,11 +47,11 @@ def create_app():
     )
     
     # Register blueprints
-    from app.auth import bp as auth_bp
-    app.register_blueprint(auth_bp)
-    
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)
+    
+    from app.auth import bp as auth_bp
+    app.register_blueprint(auth_bp, url_prefix='/auth')
     
     return app
 

@@ -49,6 +49,12 @@
                         <p class="text-sm font-medium text-gray-900">
                             {{ url.url }}
                         </p>
+                        {% if url.traffic_data.first() %}
+                        <p class="mt-1 text-sm text-gray-500">
+                            Трафик: {{ url.traffic_data.first().visitors }} просмотров
+                            ({{ url.traffic_data.first().check_date.strftime('%d.%m.%Y') }})
+                        </p>
+                        {% endif %}
                     </div>
                     <div class="ml-4 flex-shrink-0">
                         <form action="{{ url_for('main.delete_url', project_id=project.id, url_id=url.id) }}" 

@@ -1,0 +1,53 @@
+<table class="table">
+    <thead>
+        <tr>
+            <th>Ключевое слово</th>
+            <th>Текущая позиция</th>
+            <th>Изменение</th>
+            <th>Дата обновления</th>
+            <th>Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for keyword in keywords %}
+        <tr>
+            <td>{{ keyword.keyword }}</td>
+            <td>
+                {% set latest_position = keyword.get_latest_position() %}
+                {% if latest_position %}
+                    {{ latest_position.position }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% set position_change = keyword.get_position_change() %}
+                {% if position_change %}
+                    {% if position_change > 0 %}
+                        <span class="text-success">↑ {{ position_change }}</span>
+                    {% elif position_change < 0 %}
+                        <span class="text-danger">↓ {{ abs(position_change) }}</span>
+                    {% else %}
+                        <span class="text-muted">→</span>
+                    {% endif %}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if keyword.last_webmaster_update %}
+                    {{ keyword.last_webmaster_update.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn btn-sm btn-danger" 
+                        onclick="deleteKeyword({{ keyword.id }})">
+                    Удалить
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

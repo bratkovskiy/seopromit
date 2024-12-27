@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="min-h-full">
+    <header class="bg-white shadow">
+        <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold tracking-tight text-gray-900">{{ project.name }} - Данные</h1>
+                <div class="flex space-x-4">
+                    <form action="{{ url_for('main.update_positions', id=project.id) }}" method="POST" class="inline" id="updateForm">
+                        <button type="submit" id="updateButton" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Обновить данные
+                        </button>
+                    </form>
+                    <button type="button" onclick="exportToExcel()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                        Выгрузить в Excel
+                    </button>
+                    <a href="{{ url_for('main.project', id=project.id) }}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Вернуться к проекту
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
+            <!-- Прогресс обновления -->
+            <div id="updateProgress" class="hidden bg-white shadow sm:rounded-lg mb-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Процесс обновления</h3>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                        <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-sm text-gray-500">
+                        <span id="progressMessage">Инициализация...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <!-- Лог -->
+                    <div id="logContainer" class="mt-4 p-4 bg-gray-50 rounded-md font-mono text-sm text-gray-600 h-32 overflow-y-auto hidden"></div>
+                </div>
+            </div>
+
+            <!-- Результат -->
+            <div id="resultContainer" class="hidden bg-white shadow sm:rounded-lg mb-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        <div id="resultIcon" class="flex-shrink-0 w-6 h-6 mr-3"></div>
+                        <div>
+                            <h3 id="resultTitle" class="text-lg font-medium leading-6"></h3>
+                            <p id="resultMessage" class="mt-1 text-sm text-gray-500"></p>
+                        </div>
+                    </div>
+                    <div id="resultActions" class="mt-4 flex space-x-4">
+                        <!-- Здесь будут кнопки действий -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Фильтры -->
+            <div class="bg-white shadow sm:rounded-lg mb-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <form id="filterForm" class="space-y-4">
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                            <div>
+                                <label for="keyword" class="block text-sm font-medium text-gray-700">Ключевое слово</label>
+                                <input type="text" name="keyword" id="keyword" value="{{ filters.keyword }}"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="position" class="block text-sm font-medium text-gray-700">Позиции</label>
+                                <select id="position" name="position" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Все</option>
+                                    <option value="top1" {% if filters.position == 'top1' %}selected{% endif %}>ТОП1 (1.0-1.9)</option>
+                                    <option value="top3" {% if filters.position == 'top3' %}selected{% endif %}>ТОП3 (1.0-3.9)</option>
+                                    <option value="top5" {% if filters.position == 'top5' %}selected{% endif %}>ТОП5 (1.0-5.9)</option>
+                                    <option value="top10" {% if filters.position == 'top10' %}selected{% endif %}>ТОП10 (1.0-10.9)</option>
+                                    <option value="top100" {% if filters.position == 'top100' %}selected{% endif %}>ТОП100+</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="dateFrom" class="block text-sm font-medium text-gray-700">Дата с</label>
+                                <input type="date" name="dateFrom" id="dateFrom" value="{{ filters.dateFrom }}"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="dateTo" class="block text-sm font-medium text-gray-700">Дата по</label>
+                                <input type="date" name="dateTo" id="dateTo" value="{{ filters.dateTo }}"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <div class="flex justify-end space-x-4">
+                            <button type="button" onclick="clearFilters()" 
+                                    class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                Очистить
+                            </button>
+                            <button type="submit" 
+                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                                Применить
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- График -->
+            <div class="bg-white shadow sm:rounded-lg mb-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <canvas id="positionsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Таблица с данными -->
+            <div class="bg-white shadow sm:rounded-lg mb-6 overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-300">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Ключевое слово</th>
+                            {% for date in chart_data.dates %}
+                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">
+                                {{ date }}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <!-- Строка со средними значениями -->
+                        <tr class="bg-gray-50">
+                            <td class="py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">Средняя позиция</td>
+                            {% for position in chart_data.positions %}
+                            <td class="px-3 py-4 text-sm text-center text-gray-900">{{ "%.1f"|format(position) }}</td>
+                            {% endfor %}
+                        </tr>
+                        <!-- Данные по ключевым словам -->
+                        {% for keyword in keywords %}
+                        <tr>
+                            <td class="py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{{ keyword.keyword }}</td>
+                            {% for date in chart_data.dates %}
+                            <td class="px-3 py-4 text-sm text-center text-gray-900">
+                                {% set position = positions|selectattr('1.id', 'eq', keyword.id)|selectattr('0.check_date', 'strftime', '%Y-%m-%d')|selectattr('0.check_date', 'eq', date)|map(attribute='0.position')|first %}
+                                {% if position %}
+                                    {{ "%.1f"|format(position) }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Таблицы изменений позиций -->
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <!-- Улучшение позиций -->
+                <div class="bg-white shadow sm:rounded-lg overflow-hidden">
+                    <div class="px-4 py-5 sm:px-6">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">Максимальный рост позиций</h3>
+                        <p class="mt-1 text-sm text-gray-500">Топ-5 запросов с наибольшим ростом позиций</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-300">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Ключевое слово</th>
+                                    <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Текущая позиция</th>
+                                    <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Предыдущая позиция</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for item in improved_positions %}
+                                <tr>
+                                    <td class="py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{{ item.keyword.keyword }}</td>
+                                    <td class="px-3 py-4 text-sm text-center text-green-600">
+                                        {{ "%.1f"|format(item.current_position) }}
+                                        <span class="text-green-500 ml-1">↑{{ "%.1f"|format(item.change|abs) }}</span>
+                                    </td>
+                                    <td class="px-3 py-4 text-sm text-center text-gray-500">{{ "%.1f"|format(item.previous_position) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Падение позиций -->
+                <div class="bg-white shadow sm:rounded-lg overflow-hidden">
+                    <div class="px-4 py-5 sm:px-6">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">Максимальное падение позиций</h3>
+                        <p class="mt-1 text-sm text-gray-500">Топ-5 запросов с наибольшим падением позиций</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-300">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Ключевое слово</th>
+                                    <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Текущая позиция</th>
+                                    <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Предыдущая позиция</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for item in declined_positions %}
+                                <tr>
+                                    <td class="py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{{ item.keyword.keyword }}</td>
+                                    <td class="px-3 py-4 text-sm text-center text-red-600">
+                                        {{ "%.1f"|format(item.current_position) }}
+                                        <span class="text-red-500 ml-1">↓{{ "%.1f"|format(item.change|abs) }}</span>
+                                    </td>
+                                    <td class="px-3 py-4 text-sm text-center text-gray-500">{{ "%.1f"|format(item.previous_position) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// Глобальные переменные для отслеживания задачи
+let currentTaskId = null;
+let updateInterval = null;
+
+// Функция для обновления прогресса
+async function updateTaskProgress() {
+    if (!currentTaskId) return;
+    
+    try {
+        const response = await fetch(`/api/task/${currentTaskId}`);
+        const data = await response.json();
+        
+        // Обновляем прогресс-бар
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressMessage = document.getElementById('progressMessage');
+        
+        progressBar.style.width = `${data.progress}%`;
+        progressPercent.textContent = `${data.progress}%`;
+        progressMessage.textContent = data.message || '';
+        
+        // Если задача завершена или произошла ошибка
+        if (data.status !== 'running') {
+            clearInterval(updateInterval);
+            
+            const resultContainer = document.getElementById('resultContainer');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultMessage = document.getElementById('resultMessage');
+            const resultActions = document.getElementById('resultActions');
+            
+            resultContainer.classList.remove('hidden');
+            
+            if (data.status === 'completed') {
+                resultIcon.innerHTML = `
+                    <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                resultTitle.textContent = 'Обновление завершено';
+                resultTitle.className = 'text-lg font-medium leading-6 text-green-700';
+                
+                // Добавляем кнопку для просмотра результатов
+                if (data.result_url) {
+                    resultActions.innerHTML = `
+                        <a href="${data.result_url}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Посмотреть результаты
+                        </a>
+                    `;
+                }
+            } else {
+                resultIcon.innerHTML = `
+                    <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+                resultTitle.textContent = 'Ошибка при обновлении';
+                resultTitle.className = 'text-lg font-medium leading-6 text-red-700';
+            }
+            
+            resultMessage.textContent = data.message;
+            
+            // Разблокируем кнопку
+            const updateButton = document.getElementById('updateButton');
+            updateButton.disabled = false;
+            updateButton.textContent = 'Обновить данные';
+        }
+    } catch (error) {
+        console.error('Error updating progress:', error);
+    }
+}
+
+// Обработчик отправки формы обновления
+document.getElementById('updateForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Блокируем кнопку
+    const updateButton = document.getElementById('updateButton');
+    updateButton.disabled = true;
+    updateButton.textContent = 'Обновление...';
+    
+    try {
+        const response = await fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.task_id) {
+            // Показываем прогресс-бар
+            currentTaskId = data.task_id;
+            document.getElementById('updateProgress').classList.remove('hidden');
+            document.getElementById('logContainer').classList.remove('hidden');
+            
+            // Запускаем периодическое обновление
+            updateInterval = setInterval(updateTaskProgress, 1000);
+        } else {
+            // Если что-то пошло не так
+            updateButton.disabled = false;
+            updateButton.textContent = 'Обновить данные';
+            alert('Ошибка при запуске обновления');
+        }
+    } catch (error) {
+        console.error('Error starting update:', error);
+        updateButton.disabled = false;
+        updateButton.textContent = 'Обновить данные';
+        alert('Ошибка при запуске обновления');
+    }
+});
+
+// Проверяем наличие активной задачи при загрузке страницы
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const response = await fetch('/api/active_task/{{ project.id }}');
+        const data = await response.json();
+        
+        if (data.task_id) {
+            currentTaskId = data.task_id;
+            document.getElementById('updateProgress').classList.remove('hidden');
+            document.getElementById('logContainer').classList.remove('hidden');
+            
+            // Блокируем кнопку
+            const updateButton = document.getElementById('updateButton');
+            updateButton.disabled = true;
+            updateButton.textContent = 'Обновление...';
+            
+            // Запускаем периодическое обновление
+            updateInterval = setInterval(updateTaskProgress, 1000);
+        }
+    } catch (error) {
+        console.error('Error checking active task:', error);
+    }
+});
+
+// Инициализация графика
+const ctx = document.getElementById('positionsChart').getContext('2d');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{ chart_data.dates|tojson }},
+        datasets: [{
+            label: 'Средняя позиция',
+            data: {{ chart_data.positions|tojson }},
+            borderColor: 'rgb(79, 70, 229)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                reverse: true,
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Функции для работы с фильтрами
+function clearFilters() {
+    document.getElementById('keyword').value = '';
+    document.getElementById('position').value = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    document.getElementById('filterForm').submit();
+}
+
+// Обработка отправки формы
+document.getElementById('filterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Собираем параметры
+    const params = new URLSearchParams();
+    const keyword = document.getElementById('keyword').value;
+    const position = document.getElementById('position').value;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    if (keyword) params.append('keyword', keyword);
+    if (position) params.append('position', position);
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+    
+    // Перенаправляем на URL с параметрами
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+});
+
+function exportToExcel() {
+    // TODO: Реализовать выгрузку в Excel
+    alert('Функция выгрузки в Excel будет добавлена позже');
+}
+</script>
+{% endblock %}

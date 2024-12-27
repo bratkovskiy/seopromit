@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>{{ project.name }}</h1>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3>Управление проектом</h3>
+        </div>
+        <div class="card-body">
+            <a href="{{ url_for('main.update_project_data', id=project.id) }}" class="btn btn-primary">
+                Обновить данные
+            </a>
+        </div>
+    </div>
+
+    <div id="keywords-table">
+        {{ keywords_table|safe }}
+    </div>
+</div>
+{% endblock %}
