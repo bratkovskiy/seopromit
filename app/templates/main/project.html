@@ -36,9 +36,9 @@
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">Ключевые слова</h3>
                 <div class="flex space-x-2">
-                    <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
+                    <a href="{{ url_for('main.refresh_positions', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Обновить данные
+                        Обновить позиции
                     </a>
                     <a href="{{ url_for('main.project_keywords', id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">

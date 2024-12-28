@@ -496,3 +496,92 @@ def refresh_project_data(id):
         current_app.logger.error(f"Error updating data: {str(e)}")
         flash('Произошла ошибка при обновлении данных', 'error')
         return redirect(url_for('main.project', id=id))
+
+@bp.route('/project/<int:id>/refresh_positions', methods=['GET'])
+@login_required
+def refresh_positions(id):
+    try:
+        project = Project.query.get_or_404(id)
+        if project.user_id != current_user.id:
+            flash('У вас нет доступа к этому проекту', 'error')
+            return redirect(url_for('main.dashboard'))
+
+        # Создаем клиент API
+        api = YandexWebmasterAPI(
+            oauth_token=project.yandex_webmaster_token,
+            user_id=project.yandex_webmaster_user_id
+        )
+
+        # Получаем все ключевые слова проекта
+        keywords = [kw.keyword for kw in project.keywords]
+        if not keywords:
+            flash('У проекта нет ключевых слов для обновления', 'error')
+            return redirect(url_for('main.project', id=id))
+
+        # Получаем позиции для всех ключевых слов
+        positions = api.get_keywords_positions(project.yandex_webmaster_host, keywords)
+        
+        if positions is None:  # Явно проверяем на None
+            flash('Ошибка при получении данных от API Яндекс.Вебмастер. Проверьте логи для деталей.', 'error')
+            return redirect(url_for('main.project', id=id))
+            
+        if not positions:
+            flash('Не удалось получить позиции ни для одного ключевого слова', 'error')
+            return redirect(url_for('main.project', id=id))
+
+        # Обновляем позиции в базе данных
+        success_count = 0
+        error_count = 0
+        for keyword_text, (position, date_range) in positions.items():
+            if position is not None:
+                keyword = Keyword.query.filter_by(
+                    project_id=id,
+                    keyword=keyword_text
+                ).first()
+                
+                if keyword:
+                    try:
+                        # Создаем новую запись в таблице KeywordPosition
+                        keyword_position = KeywordPosition(
+                            keyword_id=keyword.id,
+                            position=position,
+                            check_date=datetime.utcnow()
+                        )
+                        
+                        # Парсим даты из строки формата "dd.mm - dd.mm"
+                        if date_range:
+                            start_date_str, end_date_str = date_range.split(' - ')
+                            current_year = datetime.now().year
+                            
+                            # Преобразуем строки дат в объекты datetime
+                            start_date = datetime.strptime(f"{start_date_str}.{current_year}", '%d.%m.%Y')
+                            end_date = datetime.strptime(f"{end_date_str}.{current_year}", '%d.%m.%Y')
+                            
+                            # Устанавливаем даты
+                            keyword_position.data_date_start = start_date
+                            keyword_position.data_date_end = end_date
+                            
+                        db.session.add(keyword_position)
+                        keyword.last_webmaster_update = datetime.utcnow()
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка при обновлении позиции для '{keyword_text}': {e}")
+                        error_count += 1
+
+        if success_count > 0:
+            db.session.commit()
+            message = f'Успешно обновлено {success_count} из {len(keywords)} ключевых слов'
+            if error_count > 0:
+                message += f' (ошибок: {error_count})'
+            flash(message, 'success')
+        else:
+            db.session.rollback()
+            flash('Не удалось обновить ни одно ключевое слово', 'error')
+            
+        return redirect(url_for('main.project', id=id))
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Ошибка при обновлении позиций: {str(e)}")
+        flash(f'Ошибка при обновлении позиций: {str(e)}', 'error')
+        return redirect(url_for('main.project', id=id))

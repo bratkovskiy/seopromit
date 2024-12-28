@@ -33,33 +33,54 @@ class YandexWebmasterAPI:
         
         try:
             response = requests.request(method, url, headers=self.headers, **kwargs)
-            response.raise_for_status()
+            if response.status_code != 200:
+                error_msg = f"Ошибка при запросе к API: {response.status_code}"
+                try:
+                    error_data = response.json()
+                    if 'error_message' in error_data:
+                        error_msg += f" - {error_data['error_message']}"
+                    elif 'message' in error_data:
+                        error_msg += f" - {error_data['message']}"
+                except:
+                    error_msg += f" - {response.text}"
+                logger.error(error_msg)
+                return None
+                
             return response.json()
         except requests.exceptions.RequestException as e:
             logger.error(f"Ошибка при запросе к API: {e}")
             return None
     
-    def get_host_id(self, host_url: str) -> Optional[str]:
-        """Получает host_id по URL хоста"""
-        logger.info(f"Получение host_id для {host_url}")
+    def get_keywords_positions(self, host_url: str, keywords: List[str]) -> Dict[str, Tuple[Optional[float], Optional[str]]]:
+        """
+        Получает позиции для списка ключевых слов
         
-        # Нормализуем URL
-        if host_url.startswith('https:') and not host_url.startswith('https://'):
-            host_url = 'https://' + host_url[6:]
-        if ':443' in host_url:
-            host_url = host_url.replace(':443', '')
-        logger.info(f"Нормализованный URL: {host_url}")
-        
-        # В рабочем скрипте host_id берется напрямую из таблицы
-        # Здесь мы просто возвращаем последнюю часть URL как host_id
-        if '/' in host_url:
-            host_id = host_url.split('/')[-1]
-            logger.info(f"Используем host_id: {host_id}")
-            return host_id
+        Args:
+            host_url: URL хоста (используется как host_id)
+            keywords: Список ключевых слов
             
-        logger.error(f"Не удалось получить host_id для {host_url}")
-        return None
-    
+        Returns:
+            Dict[str, Tuple[float, str]]: Словарь {ключевое слово: (позиция, дата)}
+        """
+        logger.info(f"Получение позиций для {len(keywords)} ключевых слов на хосте {host_url}")
+        
+        # Используем host_url как host_id
+        host_id = host_url
+        
+        # Получаем позиции для каждого ключевого слова
+        results = {}
+        for keyword in keywords:
+            try:
+                position, date = self.get_keyword_position(host_id, keyword)
+                if position is not None:
+                    results[keyword] = (position, date)
+                else:
+                    logger.warning(f"Не удалось получить позицию для '{keyword}'")
+            except Exception as e:
+                logger.error(f"Ошибка при получении позиции для '{keyword}': {e}")
+                
+        return results
+
     def get_keyword_position(self, host_id: str, query: str) -> Tuple[Optional[float], Optional[str]]:
         """Получает позицию ключевого слова"""
         logger.info(f"Получение позиции для запроса '{query}' на хосте {host_id}")
@@ -88,9 +109,14 @@ class YandexWebmasterAPI:
             }
         }
         
+        # Логируем запрос для отладки
+        logger.info(f"API запрос: POST {url}")
+        logger.info(f"Параметры: {params}")
+        
         data = self._make_request("POST", url, json=params)
         if not data or 'text_indicator_to_statistics' not in data:
             logger.warning(f"Нет данных по запросу '{query}' в ответе API")
+            logger.warning(f"Ответ API: {data}")
             return None, None
             
         positions = [stat for stat in data['text_indicator_to_statistics']
@@ -170,33 +196,3 @@ class YandexWebmasterAPI:
             error_msg = f'Ошибка при проверке хоста в Вебмастере: {str(e)}'
             logger.error(error_msg)
             return False, error_msg
-
-    def get_keywords_positions(self, host_url: str, keywords: List[str]) -> Dict[str, Tuple[Optional[float], Optional[str]]]:
-        """
-        Получает позиции для списка ключевых слов
-        
-        Args:
-            host_url: URL хоста
-            keywords: Список ключевых слов
-            
-        Returns:
-            Dict[str, Tuple[float, str]]: Словарь {ключевое слово: (позиция, дата)}
-        """
-        logger.info(f"Получение позиций для {len(keywords)} ключевых слов на хосте {host_url}")
-        
-        # Сначала получаем host_id
-        host_id = self.get_host_id(host_url)
-        if not host_id:
-            logger.error(f"Не удалось получить host_id для {host_url}")
-            return {}
-            
-        # Получаем позиции для каждого ключевого слова
-        results = {}
-        for keyword in keywords:
-            position, date = self.get_keyword_position(host_id, keyword)
-            if position is not None:
-                results[keyword] = (position, date)
-            else:
-                logger.warning(f"Не удалось получить позицию для '{keyword}'")
-                
-        return results

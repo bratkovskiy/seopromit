@@ -78,6 +78,8 @@ class KeywordPosition(db.Model):
     keyword_id = db.Column(db.Integer, db.ForeignKey('keyword.id'), nullable=False)
     position = db.Column(db.Float)
     check_date = db.Column(db.DateTime, default=datetime.utcnow)
+    data_date_start = db.Column(db.DateTime)  # Начало периода данных из Вебмастера
+    data_date_end = db.Column(db.DateTime)    # Конец периода данных из Вебмастера
 
 class URLTraffic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
