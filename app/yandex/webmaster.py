@@ -157,31 +157,29 @@ class YandexWebmasterAPI:
         Returns:
             Tuple[bool, str]: (успех, сообщение)
         """
-        logger.info(f"Проверка хоста {host_url}")
-        
-        # Используем тот же URL что и в рабочем скрипте
-        endpoint = f"/user/{self.user_id}/hosts/{host_url}/query-analytics/list"
-        
-        # Используем те же параметры что и в рабочем скрипте
-        params = {
-            "operation": "TEXT_CONTAINS",
-            "limit": "1"  # Нам нужен только один результат для проверки
-        }
+        logger.info(f"Начало валидации хоста Вебмастера: {host_url}")
         
         try:
-            response = requests.post(
+            # Делаем прямой запрос к API для проверки хоста
+            endpoint = f'/user/{self.user_id}/hosts/{host_url}'
+            logger.info(f"Отправка GET запроса к {self.BASE_URL}{endpoint}")
+            
+            response = requests.get(
                 f"{self.BASE_URL}{endpoint}",
-                json=params,
                 headers=self.headers
             )
-            logger.info(f"Статус ответа: {response.status_code}")
+            
+            logger.info(f"Получен ответ от API Вебмастера: статус {response.status_code}")
+            logger.info(f"Тело ответа: {response.text[:200]}...")  # Логируем первые 200 символов ответа
             
             if response.status_code == 200:
+                logger.info(f"Хост {host_url} успешно валидирован")
                 return True, "Хост успешно подключен в Яндекс.Вебмастере"
             elif response.status_code == 404:
+                logger.error(f"Хост {host_url} не найден в Яндекс.Вебмастере")
                 return False, "Указанный хост не найден в Яндекс.Вебмастере"
             else:
-                error_msg = f"Ошибка при проверке хоста: HTTP {response.status_code}"
+                error_msg = f"Ошибка при запросе к API: {response.status_code}"
                 try:
                     error_data = response.json()
                     if 'error_message' in error_data:
@@ -190,9 +188,10 @@ class YandexWebmasterAPI:
                         error_msg += f" - {error_data['message']}"
                 except:
                     error_msg += f" - {response.text}"
+                logger.error(error_msg)
                 return False, error_msg
                 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             error_msg = f'Ошибка при проверке хоста в Вебмастере: {str(e)}'
             logger.error(error_msg)
             return False, error_msg

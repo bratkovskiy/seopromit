@@ -9,6 +9,8 @@
             <div class="px-4 py-5 sm:p-6">
                 <form method="POST" action="" id="projectForm">
                     {{ form.hidden_tag() }}
+                    {{ form.metrika_validated(id="metrika_validated") }}
+                    {{ form.webmaster_validated(id="webmaster_validated") }}
                     
                     <div class="space-y-6">
                         <div>
@@ -45,8 +47,7 @@
                                         </div>
                                         <div class="col-span-6">
                                             {{ form.validate_metrika(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500") }}
-                                            <span id="metrikaStatus" class="ml-2 text-sm"></span>
-                                            {{ form.metrika_validated }}
+                                            <span id="metrika_status" class="ml-2 text-sm"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -86,8 +87,7 @@
                                         </div>
                                         <div class="col-span-6 flex items-center justify-end">
                                             {{ form.validate_webmaster(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500") }}
-                                            <span id="webmasterStatus" class="ml-2 text-sm"></span>
-                                            {{ form.webmaster_validated }}
+                                            <span id="webmaster_status" class="ml-2 text-sm"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -100,7 +100,7 @@
                            class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                             Отмена
                         </a>
-                        {{ form.submit(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50", disabled=True) }}
+                        {{ form.submit(id="submit_button", class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50", disabled=True) }}
                     </div>
                 </form>
             </div>
@@ -111,94 +111,190 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('projectForm');
-    const submitBtn = form.querySelector('input[type="submit"][value="Создать проект"]');
+    const submitBtn = document.getElementById('submit_button');
     const metrikaValidated = document.getElementById('metrika_validated');
     const webmasterValidated = document.getElementById('webmaster_validated');
-    const metrikaStatus = document.getElementById('metrikaStatus');
-    const webmasterStatus = document.getElementById('webmasterStatus');
+    const metrikaStatus = document.getElementById('metrika_status');
+    const webmasterStatus = document.getElementById('webmaster_status');
 
-    // Функция проверки возможности создания проекта
     function checkSubmitAvailability() {
-        if (metrikaValidated.value === 'true' && webmasterValidated.value === 'true') {
-            submitBtn.disabled = false;
-        } else {
-            submitBtn.disabled = true;
+        console.log('Checking submit availability:', {
+            metrikaValidated: metrikaValidated?.value,
+            webmasterValidated: webmasterValidated?.value,
+            submitBtn: submitBtn ? 'exists' : 'not found'
+        });
+        
+        if (submitBtn && metrikaValidated && webmasterValidated) {
+            submitBtn.disabled = !(metrikaValidated.value === 'true' && webmasterValidated.value === 'true');
+        }
+    }
+
+    // Получаем CSRF-токен из мета-тега
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    function checkSubmitAvailability() {
+        console.log('Checking submit availability:', {
+            metrikaValidated: metrikaValidated?.value,
+            webmasterValidated: webmasterValidated?.value,
+            submitBtn: submitBtn ? 'exists' : 'not found'
+        });
+        
+        if (submitBtn && metrikaValidated && webmasterValidated) {
+            submitBtn.disabled = !(metrikaValidated.value === 'true' && webmasterValidated.value === 'true');
         }
     }
 
     // Обработчик для валидации Метрики
-    form.querySelector('input[value="Проверить Яндекс.Метрику"]').addEventListener('click', function(e) {
-        e.preventDefault();
-        const counter = document.getElementById('yandex_metrika_counter').value;
-        const token = document.getElementById('yandex_metrika_token').value;
+    const validateMetrikaBtn = form.querySelector('input[value="Проверить Яндекс.Метрику"]');
+    if (validateMetrikaBtn) {
+        validateMetrikaBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const counter = document.getElementById('yandex_metrika_counter').value;
+            const token = document.getElementById('yandex_metrika_token').value;
 
-        fetch('/validate_metrika', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                counter: counter,
-                token: token
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                metrikaStatus.textContent = '✓ ' + data.message;
-                metrikaStatus.className = 'ml-2 text-sm text-green-600';
-                metrikaValidated.value = 'true';
-            } else {
-                metrikaStatus.textContent = '✗ ' + data.message;
+            console.log('Валидация Метрики:', { counter, token: token.substring(0, 10) + '...' });
+
+            if (!counter || !token) {
+                metrikaStatus.textContent = '✗ Заполните все поля';
                 metrikaStatus.className = 'ml-2 text-sm text-red-600';
                 metrikaValidated.value = 'false';
+                checkSubmitAvailability();
+                return;
             }
-            checkSubmitAvailability();
+
+            metrikaStatus.textContent = '⌛ Проверяем подключение...';
+            metrikaStatus.className = 'ml-2 text-sm text-gray-600';
+
+            fetch('/validate_metrika', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    counter: counter,
+                    token: token
+                })
+            })
+            .then(response => {
+                console.log('Ответ сервера (статус):', response.status);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Ответ сервера (данные):', data);
+                if (data.success) {
+                    metrikaStatus.textContent = '✓ ' + data.message;
+                    metrikaStatus.className = 'ml-2 text-sm text-green-600';
+                    metrikaValidated.value = 'true';
+                } else {
+                    metrikaStatus.textContent = '✗ ' + data.message;
+                    metrikaStatus.className = 'ml-2 text-sm text-red-600';
+                    metrikaValidated.value = 'false';
+                }
+                checkSubmitAvailability();
+            })
+            .catch(error => {
+                console.error('Ошибка при валидации Метрики:', error);
+                metrikaStatus.textContent = '✗ Ошибка при проверке подключения';
+                metrikaStatus.className = 'ml-2 text-sm text-red-600';
+                metrikaValidated.value = 'false';
+                checkSubmitAvailability();
+            });
         });
-    });
+    }
 
     // Обработчик для валидации Вебмастера
-    form.querySelector('input[value="Проверить Яндекс.Вебмастер"]').addEventListener('click', function(e) {
-        e.preventDefault();
-        const host = document.getElementById('yandex_webmaster_host').value;
-        const token = document.getElementById('yandex_webmaster_token').value;
-        const user_id = document.getElementById('yandex_webmaster_user_id').value;
+    const validateWebmasterBtn = form.querySelector('input[value="Проверить Яндекс.Вебмастер"]');
+    if (validateWebmasterBtn) {
+        validateWebmasterBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const host = document.getElementById('yandex_webmaster_host').value;
+            const token = document.getElementById('yandex_webmaster_token').value;
+            const user_id = document.getElementById('yandex_webmaster_user_id').value;
 
-        if (!host || !token || !user_id) {
-            webmasterStatus.textContent = '✗ Заполните все поля';
-            webmasterStatus.className = 'ml-2 text-sm text-red-600';
-            webmasterValidated.value = 'false';
-            return;
-        }
+            console.log('Валидация Вебмастера:', { 
+                host, 
+                token: token.substring(0, 10) + '...', 
+                user_id 
+            });
 
-        fetch('/validate_webmaster', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                host: host,
-                token: token,
-                user_id: user_id
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                webmasterStatus.textContent = '✓ ' + data.message;
-                webmasterStatus.className = 'ml-2 text-sm text-green-600';
-                webmasterValidated.value = 'true';
-            } else {
-                webmasterStatus.textContent = '✗ ' + data.message;
+            if (!host || !token || !user_id) {
+                webmasterStatus.textContent = '✗ Заполните все поля';
                 webmasterStatus.className = 'ml-2 text-sm text-red-600';
                 webmasterValidated.value = 'false';
+                checkSubmitAvailability();
+                return;
             }
-            checkSubmitAvailability();
+
+            webmasterStatus.textContent = '⌛ Проверяем подключение...';
+            webmasterStatus.className = 'ml-2 text-sm text-gray-600';
+
+            fetch('/validate_webmaster', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    host: host,
+                    token: token,
+                    user_id: user_id
+                })
+            })
+            .then(response => {
+                console.log('Ответ сервера (статус):', response.status);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Ответ сервера (данные):', data);
+                if (data.success) {
+                    webmasterStatus.textContent = '✓ ' + data.message;
+                    webmasterStatus.className = 'ml-2 text-sm text-green-600';
+                    document.getElementById('webmaster_validated').value = 'true';
+                } else {
+                    webmasterStatus.textContent = '✗ ' + data.message;
+                    webmasterStatus.className = 'ml-2 text-sm text-red-600';
+                    document.getElementById('webmaster_validated').value = 'false';
+                }
+                checkSubmitAvailability();
+            })
+            .catch(error => {
+                console.error('Ошибка при валидации Вебмастера:', error);
+                webmasterStatus.textContent = '✗ Ошибка при проверке подключения';
+                webmasterStatus.className = 'ml-2 text-sm text-red-600';
+                document.getElementById('webmaster_validated').value = 'false';
+                checkSubmitAvailability();
+            });
         });
+    }
+
+    // Сброс валидации при изменении полей
+    ['yandex_metrika_counter', 'yandex_metrika_token'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', function() {
+                metrikaValidated.value = 'false';
+                metrikaStatus.textContent = '';
+                checkSubmitAvailability();
+            });
+        }
     });
 
-    // Начальная проверка доступности кнопки создания
-    checkSubmitAvailability();
+    ['yandex_webmaster_host', 'yandex_webmaster_token', 'yandex_webmaster_user_id'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', function() {
+                webmasterValidated.value = 'false';
+                webmasterStatus.textContent = '';
+                checkSubmitAvailability();
+            });
+        }
+    });
 });
 </script>
 {% endblock %}

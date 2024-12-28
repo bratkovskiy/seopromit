@@ -19,6 +19,7 @@
                   method="POST"
                   class="inline"
                   onsubmit="return confirm('Вы уверены, что хотите удалить ВСЕ URLs?');">
+                {{ form.csrf_token }}
                 <button type="submit" 
                         class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
                     Очистить все
@@ -61,6 +62,7 @@
                               method="POST"
                               class="inline"
                               onsubmit="return confirm('Вы уверены, что хотите удалить этот URL?');">
+                            {{ form.csrf_token }}
                             <button type="submit" 
                                     class="text-red-600 hover:text-red-900">
                                 Удалить
@@ -92,6 +94,7 @@
                     </h3>
                     <div class="mt-2">
                         <form action="{{ url_for('main.add_urls', project_id=project.id) }}" method="POST">
+                            {{ form.csrf_token }}
                             <div>
                                 <label for="urls" class="block text-sm font-medium text-gray-700">
                                     URLs

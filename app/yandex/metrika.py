@@ -1,5 +1,8 @@
 import requests
+import logging
 from flask import current_app
+
+logger = logging.getLogger(__name__)
 
 class YandexMetrikaAPI:
     BASE_URL = 'https://api-metrika.yandex.net/management/v1'
@@ -13,19 +16,35 @@ class YandexMetrikaAPI:
     
     def validate_counter(self, counter_id):
         """Проверяет доступность счетчика Метрики"""
+        logger.info(f"Начало валидации счетчика Метрики {counter_id}")
         try:
+            logger.info(f"Отправка запроса к API Метрики для счетчика {counter_id}")
             response = requests.get(
                 f'{self.BASE_URL}/counter/{counter_id}',
                 headers=self.headers
             )
+            logger.info(f"Получен ответ от API Метрики: статус {response.status_code}")
+            logger.info(f"Тело ответа: {response.text[:200]}...")  # Логируем первые 200 символов
+            
             if response.status_code == 200:
+                logger.info("Валидация счетчика Метрики успешна")
                 return True, "Счетчик Яндекс.Метрики успешно подключен"
             elif response.status_code == 403:
+                logger.error("Ошибка доступа к API Метрики: 403")
                 return False, "Ошибка доступа: проверьте права токена Яндекс.Метрики"
             else:
-                return False, f"Ошибка подключения к Яндекс.Метрике: {response.json().get('message', 'Неизвестная ошибка')}"
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('message', 'Неизвестная ошибка')
+                except:
+                    error_msg = response.text or 'Неизвестная ошибка'
+                
+                logger.error(f"Ошибка при валидации счетчика: {error_msg}")
+                return False, f"Ошибка подключения к Яндекс.Метрике: {error_msg}"
+                
         except requests.exceptions.RequestException as e:
-            current_app.logger.error(f'Ошибка при проверке счетчика Метрики: {str(e)}')
+            error_msg = f'Ошибка при проверке счетчика Метрики: {str(e)}'
+            logger.error(error_msg)
             return False, "Ошибка подключения к API Яндекс.Метрики"
 
     def get_pageviews(self, counter_id: str, start_date: str, end_date: str, filters: str = None) -> int:
