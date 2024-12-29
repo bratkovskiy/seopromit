@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import io
 import xlsxwriter
 from flask import send_file
+import builtins  # Импортируем модуль builtins
 
 logger = logging.getLogger(__name__)
 
@@ -545,42 +546,42 @@ def project_positions_report(project_id):
 
     position_changes = []
 
-    if len(check_dates) >= 2:
-        latest_date = check_dates[0]
-        prev_date = check_dates[1]
+    # Для каждого ключевого слова
+    for keyword, dates in positions_data.items():
+        # Находим первую и последнюю позицию
+        positions_list = [(date, data['position']) for date, data in dates.items() if data['position'] is not None]
+        if len(positions_list) >= 2:
+            positions_list.sort()  # Сортируем по дате
+            first_date, first_pos = positions_list[0]
+            last_date, last_pos = positions_list[-1]
+            
+            change = first_pos - last_pos  # Изменение = старая позиция - новая позиция
 
-        for keyword, dates in positions_data.items():
-            latest_pos = dates[latest_date]['position']
-            prev_pos = dates[prev_date]['position']
+            # Count changes
+            if change > 0:
+                changes_data['improved'] += 1
+            elif change < 0:
+                changes_data['worsened'] += 1
+            else:
+                changes_data['unchanged'] += 1
 
-            if latest_pos is not None and prev_pos is not None:
-                change = prev_pos - latest_pos
+            # Count distribution (используем последнюю позицию)
+            if last_pos <= 10:
+                changes_data['top10'] += 1
+            elif last_pos <= 25:
+                changes_data['top25'] += 1
+            elif last_pos <= 100:
+                changes_data['top100'] += 1
+            else:
+                changes_data['over100'] += 1
 
-                # Count changes
-                if change > 0:
-                    changes_data['improved'] += 1
-                elif change < 0:
-                    changes_data['worsened'] += 1
-                else:
-                    changes_data['unchanged'] += 1
-
-                # Count distribution
-                if latest_pos <= 10:
-                    changes_data['top10'] += 1
-                elif latest_pos <= 25:
-                    changes_data['top25'] += 1
-                elif latest_pos <= 100:
-                    changes_data['top100'] += 1
-                else:
-                    changes_data['over100'] += 1
-
-                # Add to position changes list
-                position_changes.append({
-                    'keyword': keyword,
-                    'current_position': latest_pos,
-                    'previous_position': prev_pos,
-                    'change': change
-                })
+            # Add to position changes list
+            position_changes.append({
+                'keyword': keyword,
+                'current_position': last_pos,
+                'previous_position': first_pos,
+                'change': change
+            })
 
     # Sort and get biggest changes
     position_changes.sort(key=lambda x: abs(x['change']), reverse=True)
@@ -598,9 +599,14 @@ def project_positions_report(project_id):
         if positions_list:
             avg = round(sum(positions_list) / len(positions_list), 1)
             avg_positions.append({
-                'date': date,
-                'value': avg
+                'x': date,
+                'y': avg
             })
+    
+    print("Debug - avg_positions:", avg_positions)  # Отладочный вывод
+
+    # Get all check dates without limit
+    check_dates = sorted(list({pos.check_date.strftime('%Y-%m-%d') for pos in positions}), reverse=True)
 
     return render_template('main/positions_report.html',
                          project=project,
@@ -890,6 +896,16 @@ def refresh_positions(id):
         logger.error(f"Ошибка при обновлении позиций: {str(e)}")
         flash(f'Ошибка при обновлении позиций: {str(e)}', 'error')
         return redirect(url_for('main.project', id=id))
+
+@bp.route('/test-chart')
+@login_required
+def test_chart():
+    # Тестовые данные для графика
+    data = {
+        'dates': ['2024-12-28', '2024-12-29'],
+        'positions': [8.5, 6.3]
+    }
+    return render_template('main/test_chart.html', title='Тестовый график', chart_data=data, zip=builtins.zip)
 
 @bp.route('/project/<int:project_id>/positions/export')
 @login_required

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.41.0/dist/apexcharts.min.js"></script>
+    <style>
+        #debug {
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        #chart {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug"></div>
+    <div id="chart"></div>
+
+    <script>
+        const debug = document.getElementById('debug');
+        
+        function log(message, isError = false) {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.textContent = `[${time}] ${message}`;
+            if (isError) line.className = 'error';
+            debug.appendChild(line);
+            console.log(`[${time}] ${message}`);
+        }
+
+        // Проверяем загрузку ApexCharts
+        window.addEventListener('load', function() {
+            log('Страница загружена');
+            log(typeof ApexCharts !== 'undefined' 
+                ? 'ApexCharts загружен успешно' 
+                : 'ApexCharts НЕ загружен!', typeof ApexCharts === 'undefined');
+
+            try {
+                const options = {
+                    series: [{
+                        name: 'Тест',
+                        data: [10, 20, 30, 40]
+                    }],
+                    chart: {
+                        type: 'line',
+                        height: 350,
+                        background: '#fff'
+                    },
+                    title: {
+                        text: 'Тестовый график',
+                        align: 'center'
+                    }
+                };
+                
+                log('Создаем график...');
+                const chart = new ApexCharts(document.querySelector("#chart"), options);
+                
+                log('Рендерим график...');
+                chart.render().then(() => {
+                    log('График успешно отрендерен');
+                }).catch(err => {
+                    log('Ошибка рендеринга: ' + err.message, true);
+                });
+                
+            } catch (error) {
+                log('Ошибка: ' + error.message, true);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,27 +1,232 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Chart</title>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-</head>
-<body>
-    <div id="chart" style="width:100%;height:400px;"></div>
-    <script>
-        var options = {
-            series: [{
-                name: 'Позиция',
-                data: [8.5, 6.3]
-            }],
-            chart: {
-                height: 400,
-                type: 'line'
-            },
-            yaxis: {
-                reversed: true
+{% extends "base.html" %}
+
+{% block head %}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="bg-white p-4 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-4">Динамика позиций</h2>
+        <div class="relative">
+            <svg id="chart" width="800" height="400" style="background: white;">
+                <g transform="translate(50,50)">
+                    <!-- График будет добавлен через JavaScript -->
+                </g>
+            </svg>
+            <!-- Всплывающая подсказка -->
+            <div id="tooltip" class="absolute hidden bg-gray-800 text-white p-2 rounded shadow-lg text-sm" style="pointer-events: none;">
+                <div class="date"></div>
+                <div class="position"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dates = {{ chart_data.dates|tojson }};
+    const positions = {{ chart_data.positions|tojson }};
+    
+    const width = 700;
+    const height = 300;
+    const padding = 40;
+    
+    // Функция для создания линии
+    function createPath(points) {
+        return points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
+    }
+    
+    // Подготовка данных
+    const xScale = width / (dates.length - 1);
+    const yScale = (height - 2 * padding) / (Math.max(...positions) - Math.min(...positions));
+    
+    const points = positions.map((pos, i) => [
+        i * xScale,
+        padding + (pos - Math.min(...positions)) * yScale
+    ]);
+    
+    const svg = document.getElementById('chart');
+    const g = svg.querySelector('g');
+    const tooltip = document.getElementById('tooltip');
+    
+    // Очищаем SVG
+    while (g.firstChild) {
+        g.removeChild(g.firstChild);
+    }
+    
+    // Добавляем линию с анимацией
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', createPath(points));
+    path.setAttribute('stroke', '#2196F3');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke-dasharray', path.getTotalLength());
+    path.setAttribute('stroke-dashoffset', path.getTotalLength());
+    g.appendChild(path);
+    
+    // Анимация линии
+    path.animate(
+        [
+            { strokeDashoffset: path.getTotalLength() },
+            { strokeDashoffset: 0 }
+        ],
+        {
+            duration: 1000,
+            fill: 'forwards',
+            easing: 'ease-out'
+        }
+    );
+    
+    // Добавляем точки с анимацией и интерактивностью
+    points.forEach(([x, y], i) => {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', '0'); // Начальный радиус 0 для анимации
+        circle.setAttribute('fill', '#2196F3');
+        
+        // Анимация появления точки
+        circle.animate(
+            [
+                { r: 0, opacity: 0 },
+                { r: 4, opacity: 1 }
+            ],
+            {
+                duration: 500,
+                delay: 1000 + i * 100,
+                fill: 'forwards',
+                easing: 'ease-out'
             }
-        };
-        var chart = new ApexCharts(document.querySelector("#chart"), options);
-        chart.render();
-    </script>
-</body>
-</html>
+        );
+        
+        // Интерактивность
+        circle.addEventListener('mouseenter', (e) => {
+            // Увеличиваем точку
+            circle.setAttribute('r', '6');
+            
+            // Показываем тултип
+            tooltip.querySelector('.date').textContent = dates[i];
+            tooltip.querySelector('.position').textContent = `Позиция: ${positions[i].toFixed(1)}`;
+            tooltip.style.display = 'block';
+            
+            // Позиционируем тултип
+            const rect = svg.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            tooltip.style.left = (rect.left + x + 50 - tooltipRect.width / 2) + 'px';
+            tooltip.style.top = (rect.top + y + 40 - tooltipRect.height - 10) + 'px';
+        });
+        
+        circle.addEventListener('mouseleave', () => {
+            circle.setAttribute('r', '4');
+            tooltip.style.display = 'none';
+        });
+        
+        g.appendChild(circle);
+        
+        // Добавляем подпись со значением
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.textContent = positions[i].toFixed(1);
+        text.setAttribute('x', x);
+        text.setAttribute('y', y - 10);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('opacity', '0'); // Начальная прозрачность 0 для анимации
+        
+        // Анимация появления текста
+        text.animate(
+            [
+                { opacity: 0, transform: 'translateY(10px)' },
+                { opacity: 1, transform: 'translateY(0)' }
+            ],
+            {
+                duration: 500,
+                delay: 1000 + i * 100,
+                fill: 'forwards',
+                easing: 'ease-out'
+            }
+        );
+        
+        g.appendChild(text);
+    });
+    
+    // Добавляем оси с анимацией
+    const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    yAxis.setAttribute('x1', -1);
+    yAxis.setAttribute('y1', 0);
+    yAxis.setAttribute('x2', -1);
+    yAxis.setAttribute('y2', height - padding);
+    yAxis.setAttribute('stroke', '#666');
+    yAxis.setAttribute('stroke-width', '1');
+    yAxis.setAttribute('stroke-dasharray', height - padding);
+    yAxis.setAttribute('stroke-dashoffset', height - padding);
+    g.appendChild(yAxis);
+    
+    // Анимация оси Y
+    yAxis.animate(
+        [
+            { strokeDashoffset: height - padding },
+            { strokeDashoffset: 0 }
+        ],
+        {
+            duration: 500,
+            fill: 'forwards',
+            easing: 'ease-out'
+        }
+    );
+    
+    // Добавляем ось X с анимацией
+    const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    xAxis.setAttribute('x1', 0);
+    xAxis.setAttribute('y1', height - padding);
+    xAxis.setAttribute('x2', width);
+    xAxis.setAttribute('y2', height - padding);
+    xAxis.setAttribute('stroke', '#666');
+    xAxis.setAttribute('stroke-width', '1');
+    xAxis.setAttribute('stroke-dasharray', width);
+    xAxis.setAttribute('stroke-dashoffset', width);
+    g.appendChild(xAxis);
+    
+    // Анимация оси X
+    xAxis.animate(
+        [
+            { strokeDashoffset: width },
+            { strokeDashoffset: 0 }
+        ],
+        {
+            duration: 500,
+            fill: 'forwards',
+            easing: 'ease-out'
+        }
+    );
+    
+    // Добавляем подписи дат с анимацией
+    dates.forEach((date, i) => {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.textContent = date;
+        text.setAttribute('x', i * xScale);
+        text.setAttribute('y', height - padding + 20);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('transform', 'rotate(45 ' + (i * xScale) + ',' + (height - padding + 20) + ')');
+        text.setAttribute('opacity', '0'); // Начальная прозрачность 0 для анимации
+        
+        // Анимация появления текста
+        text.animate(
+            [
+                { opacity: 0, transform: `rotate(45 ${i * xScale},${height - padding + 20}) translateY(10px)` },
+                { opacity: 1, transform: `rotate(45 ${i * xScale},${height - padding + 20}) translateY(0)` }
+            ],
+            {
+                duration: 500,
+                delay: 1500 + i * 100,
+                fill: 'forwards',
+                easing: 'ease-out'
+            }
+        );
+        
+        g.appendChild(text);
+    });
+});
+</script>
+{% endblock %}

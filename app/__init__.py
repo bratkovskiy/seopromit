@@ -46,6 +46,10 @@ def create_app(config_class=Config):
         token=app.config['VAULT_TOKEN']
     )
     
+    # Явно инициализируем статические файлы
+    app.static_folder = 'static'
+    app.static_url_path = '/static'
+    
     # Register blueprints
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)
