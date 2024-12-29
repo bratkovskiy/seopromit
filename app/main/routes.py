@@ -1,10 +1,10 @@
 from flask import render_template, flash, redirect, url_for, request, jsonify, current_app, session
 from flask_login import login_required, current_user
+from flask_wtf import FlaskForm
 from app import db, socketio, csrf
 from app.main import bp
-from app.main.forms import ProjectForm
-from flask_wtf import FlaskForm
-from app.models import User, Project, Region, Keyword, KeywordPosition, URL, URLTraffic
+from app.main.forms import ProjectForm, URLForm, KeywordForm
+from app.models import User, Project, Keyword, KeywordPosition, URL, URLTraffic, Region
 from app.yandex import YandexMetrikaAPI, YandexWebmasterAPI
 from datetime import datetime, timedelta
 import logging
@@ -31,12 +31,6 @@ def inject_models():
         'URL': URL,
         'URLTraffic': URLTraffic
     }
-
-class KeywordForm(FlaskForm):
-    pass
-
-class URLForm(FlaskForm):
-    pass
 
 @login_required
 @bp.route('/')
@@ -103,76 +97,75 @@ def project_keywords(id):
         return redirect(url_for('main.dashboard'))
     
     form = KeywordForm()
-    
-    if request.method == 'POST' and form.validate_on_submit():
-        region_id = request.form.get('region_id')
-        if not region_id:
-            flash('Необходимо выбрать регион', 'error')
-            return redirect(url_for('main.project_keywords', id=id))
-        
-        # Проверяем существование региона
-        region = Region.query.get(region_id)
-        if not region:
-            flash('Выбранный регион не существует', 'error')
-            return redirect(url_for('main.project_keywords', id=id))
-        
-        keywords_text = request.form.get('keywords', '').strip()
-        if not keywords_text:
-            flash('Список ключевых слов не может быть пустым', 'error')
-            return redirect(url_for('main.project_keywords', id=id))
-        
-        # Разбиваем текст на отдельные ключевые слова
-        keywords_list = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
-        
-        # Убираем дубликаты
-        keywords_list = list(dict.fromkeys(keywords_list))
-        
-        # Добавляем каждое ключевое слово
-        added_count = 0
-        skipped_count = 0
-        for keyword_text in keywords_list:
-            # Проверяем, не существует ли уже такое ключевое слово для данного проекта и региона
-            existing_keyword = Keyword.query.filter_by(
-                project_id=id,
-                region_id=region_id,
-                keyword=keyword_text
-            ).first()
-            
-            if existing_keyword:
-                skipped_count += 1
-                continue
-                
-            keyword = Keyword(
-                keyword=keyword_text,
-                project_id=id,
-                region_id=region_id
-            )
-            db.session.add(keyword)
-            added_count += 1
-        
-        db.session.commit()
-        
-        if added_count > 0:
-            message = f'Добавлено {added_count} ключевых слов'
-            if skipped_count > 0:
-                message += f' (пропущено {skipped_count} дубликатов)'
-            flash(message, 'success')
-        else:
-            if skipped_count > 0:
-                flash(f'Все {skipped_count} ключевых слов уже существуют', 'warning')
-            else:
-                flash('Нет новых ключевых слов для добавления', 'warning')
-        return redirect(url_for('main.project_keywords', id=id))
-    
-    # Получаем список регионов для формы
     regions = Region.query.order_by(Region.name).all()
     
+    if request.method == 'POST':
+        if form.validate_on_submit():
+            region_id = request.form.get('region_id')
+            if not region_id:
+                flash('Выберите регион', 'error')
+                return render_template('main/keywords.html', 
+                                    title='Ключевые слова',
+                                    project=project,
+                                    regions=regions,
+                                    form=form)
+            
+            keywords_text = form.keywords.data.strip()
+            if not keywords_text:
+                flash('Введите ключевые слова', 'error')
+                return render_template('main/keywords.html', 
+                                    title='Ключевые слова',
+                                    project=project,
+                                    regions=regions,
+                                    form=form)
+            
+            # Разбиваем текст на отдельные ключевые слова
+            keywords_list = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
+            added_count = 0
+            exists_count = 0
+            error_count = 0
+            
+            for keyword_text in keywords_list:
+                # Проверяем, не существует ли уже такое ключевое слово для данного проекта и региона
+                existing_keyword = Keyword.query.filter_by(
+                    project_id=id,
+                    keyword=keyword_text,
+                    region_id=region_id
+                ).first()
+                
+                if existing_keyword:
+                    exists_count += 1
+                    continue
+                
+                try:
+                    keyword = Keyword(
+                        keyword=keyword_text,
+                        project_id=id,
+                        region_id=region_id
+                    )
+                    db.session.add(keyword)
+                    db.session.commit()
+                    added_count += 1
+                except Exception as e:
+                    db.session.rollback()
+                    error_count += 1
+                    current_app.logger.error(f"Error adding keyword '{keyword_text}' to project {id}: {str(e)}")
+            
+            if added_count > 0:
+                flash(f'Добавлено {added_count} ключевых слов', 'success')
+            if exists_count > 0:
+                flash(f'{exists_count} ключевых слов уже существуют', 'warning')
+            if error_count > 0:
+                flash(f'Не удалось добавить {error_count} ключевых слов', 'error')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
+    
     return render_template('main/keywords.html', 
-                         title='Keywords', 
-                         project=project, 
-                         keywords=project.keywords,
+                         title='Ключевые слова',
+                         project=project,
                          regions=regions,
-                         KeywordPosition=KeywordPosition,
                          form=form)
 
 @bp.route('/project/<int:id>/keywords/table')
@@ -210,94 +203,93 @@ def add_urls(project_id):
             flash('Access denied.', 'error')
             return redirect(url_for('main.dashboard'))
         
-        urls_text = request.form.get('urls', '').strip()
+        urls_text = form.urls.data.strip()
         if not urls_text:
-            flash('Список URLs не может быть пустым', 'error')
+            flash('Введите URLs', 'error')
             return redirect(url_for('main.project_urls', id=project_id))
         
         # Разбиваем текст на отдельные URLs
         urls_list = [url.strip() for url in urls_text.split('\n') if url.strip()]
-        
-        # Убираем дубликаты и сохраняем информацию о количестве
-        original_count = len(urls_list)
-        unique_urls = list(dict.fromkeys(urls_list))
-        duplicates_count = original_count - len(unique_urls)
-        
-        # Добавляем только уникальные URLs
         added_count = 0
-        skipped_count = 0
-        for url_text in unique_urls:
-            # Проверяем, не существует ли уже такой URL для данного проекта
+        exists_count = 0
+        error_count = 0
+        
+        for url_text in urls_list:
+            # Проверяем, не существует ли уже такой URL
             existing_url = URL.query.filter_by(
                 project_id=project_id,
                 url=url_text
             ).first()
             
             if existing_url:
-                skipped_count += 1
+                exists_count += 1
                 continue
-                
-            url = URL(
-                url=url_text,
-                project_id=project_id
-            )
-            db.session.add(url)
-            added_count += 1
+            
+            try:
+                url = URL(url=url_text, project_id=project_id)
+                db.session.add(url)
+                db.session.commit()
+                added_count += 1
+            except Exception as e:
+                db.session.rollback()
+                error_count += 1
+                current_app.logger.error(f"Error adding URL '{url_text}' to project {project_id}: {str(e)}")
         
-        db.session.commit()
-        
-        # Формируем сообщение о результатах
-        message_parts = []
         if added_count > 0:
-            message_parts.append(f'Добавлено {added_count} новых URLs')
-        if skipped_count > 0:
-            message_parts.append(f'Пропущено {skipped_count} существующих URLs')
-        if duplicates_count > 0:
-            message_parts.append(f'Удалено {duplicates_count} повторяющихся URLs')
-        
-        if message_parts:
-            flash('. '.join(message_parts), 'info')
-        else:
-            flash('Не добавлено ни одного URL', 'warning')
+            flash(f'Добавлено {added_count} URLs', 'success')
+        if exists_count > 0:
+            flash(f'{exists_count} URLs уже существуют', 'warning')
+        if error_count > 0:
+            flash(f'Не удалось добавить {error_count} URLs', 'error')
     else:
-        flash('Ошибка валидации формы', 'error')
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
     
     return redirect(url_for('main.project_urls', id=project_id))
 
 @bp.route('/project/<int:project_id>/url/<int:url_id>/delete', methods=['POST'])
 @login_required
 def delete_url(project_id, url_id):
-    project = Project.query.get_or_404(project_id)
-    if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
-        return redirect(url_for('main.dashboard'))
+    form = URLForm()
+    if form.validate_on_submit():
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        url = URL.query.get_or_404(url_id)
+        if url.project_id != project_id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        try:
+            db.session.delete(url)
+            db.session.commit()
+            flash('URL успешно удален.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка при удалении URL: {str(e)}', 'error')
     
-    url = URL.query.get_or_404(url_id)
-    if url.project_id != project_id:
-        flash('URL не принадлежит данному проекту', 'error')
-        return redirect(url_for('main.project_urls', id=project_id))
-    
-    db.session.delete(url)
-    db.session.commit()
-    flash('URL удален', 'success')
     return redirect(url_for('main.project_urls', id=project_id))
 
-@bp.route('/project/<int:project_id>/urls/clear_all', methods=['POST'])
+@bp.route('/project/<int:project_id>/urls/clear', methods=['POST'])
 @login_required
 def clear_all_urls(project_id):
-    project = Project.query.get_or_404(project_id)
-    if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
-        return redirect(url_for('main.dashboard'))
-    
-    try:
-        # Удаляем все URLs проекта
-        URL.query.filter_by(project_id=project_id).delete()
-        db.session.commit()
-        flash('Все URLs успешно удалены', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Ошибка при удалении URLs: {str(e)}', 'error')
+    form = URLForm()
+    if form.validate_on_submit():
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        try:
+            URL.query.filter_by(project_id=project_id).delete()
+            db.session.commit()
+            flash('Все URLs успешно удалены.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка при удалении URLs: {str(e)}', 'error')
     
     return redirect(url_for('main.project_urls', id=project_id))
 
@@ -306,11 +298,21 @@ def clear_all_urls(project_id):
 def delete_project(id):
     project = Project.query.get_or_404(id)
     if project.user_id != current_user.id:
-        flash('У вас нет прав для удаления этого проекта.', 'error')
+        flash('Access denied.', 'error')
         return redirect(url_for('main.dashboard'))
-    db.session.delete(project)
-    db.session.commit()
-    flash('Проект успешно удален.', 'success')
+    
+    try:
+        # Удаляем все связанные данные
+        # URLs и их трафик будут удалены автоматически благодаря cascade='all, delete-orphan'
+        # Ключевые слова и их позиции тоже будут удалены автоматически
+        db.session.delete(project)
+        db.session.commit()
+        flash('Проект успешно удален', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при удалении проекта: {str(e)}', 'error')
+        current_app.logger.error(f"Error deleting project {id}: {str(e)}")
+    
     return redirect(url_for('main.dashboard'))
 
 @bp.route('/validate_metrika', methods=['POST'])
@@ -383,67 +385,37 @@ def add_keyword(project_id):
         
         region_id = request.form.get('region_id')
         if not region_id:
-            flash('Необходимо выбрать регион', 'error')
+            flash('Выберите регион', 'error')
             return redirect(url_for('main.project_keywords', id=project_id))
         
-        # Проверяем существование региона
-        region = Region.query.get(region_id)
-        if not region:
-            flash('Выбранный регион не существует', 'error')
-            return redirect(url_for('main.project_keywords', id=project_id))
+        keyword_text = form.keywords.data
         
-        keywords_text = request.form.get('keywords', '').strip()
-        if not keywords_text:
-            flash('Список ключевых слов не может быть пустым', 'error')
-            return redirect(url_for('main.project_keywords', id=project_id))
+        # Проверяем, не существует ли уже такое ключевое слово для данного проекта
+        existing_keyword = Keyword.query.filter_by(
+            project_id=project_id,
+            keyword=keyword_text,
+            region_id=region_id
+        ).first()
         
-        # Разбиваем текст на отдельные ключевые слова
-        keywords_list = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
-        
-        # Убираем дубликаты
-        keywords_list = list(dict.fromkeys(keywords_list))
-        
-        # Добавляем каждое ключевое слово
-        added_count = 0
-        skipped_count = 0
-        for keyword_text in keywords_list:
-            # Проверяем, не существует ли уже такое ключевое слово для данного проекта и региона
-            existing_keyword = Keyword.query.filter_by(
-                project_id=project_id,
-                region_id=region_id,
-                keyword=keyword_text
-            ).first()
-            
-            if existing_keyword:
-                skipped_count += 1
-                continue
-                
+        if existing_keyword:
+            flash('Такое ключевое слово уже существует для выбранного региона', 'error')
+        else:
             keyword = Keyword(
                 keyword=keyword_text,
                 project_id=project_id,
                 region_id=region_id
             )
             db.session.add(keyword)
-            added_count += 1
-        
-        db.session.commit()
-        
-        if added_count > 0:
-            message = f'Добавлено {added_count} ключевых слов'
-            if skipped_count > 0:
-                message += f' (пропущено {skipped_count} дубликатов)'
-            flash(message, 'success')
-        else:
-            if skipped_count > 0:
-                flash(f'Все {skipped_count} ключевых слов уже существуют', 'warning')
-            else:
-                flash('Нет новых ключевых слов для добавления', 'warning')
+            db.session.commit()
+            flash('Ключевое слово добавлено', 'success')
     else:
-        flash('Ошибка валидации формы', 'error')
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
     
     return redirect(url_for('main.project_keywords', id=project_id))
 
-@bp.route('/project/<int:project_id>/keywords/<int:keyword_id>/delete', methods=['POST'])
+@bp.route('/project/<int:project_id>/keyword/<int:keyword_id>/delete', methods=['POST'])
 @login_required
 def delete_keyword(project_id, keyword_id):
     form = KeywordForm()
@@ -458,11 +430,36 @@ def delete_keyword(project_id, keyword_id):
             flash('Access denied.', 'error')
             return redirect(url_for('main.dashboard'))
         
-        db.session.delete(keyword)
-        db.session.commit()
-        flash('Ключевое слово удалено', 'success')
-    else:
-        flash('Ошибка валидации формы', 'error')
+        try:
+            db.session.delete(keyword)
+            db.session.commit()
+            flash('Ключевое слово успешно удалено', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка при удалении ключевого слова: {str(e)}', 'error')
+            current_app.logger.error(f"Error deleting keyword {keyword_id} from project {project_id}: {str(e)}")
+    
+    return redirect(url_for('main.project_keywords', id=project_id))
+
+@bp.route('/project/<int:project_id>/keywords/clear', methods=['POST'])
+@login_required
+def clear_all_keywords(project_id):
+    form = KeywordForm()
+    if form.validate_on_submit():
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('main.dashboard'))
+        
+        try:
+            Keyword.query.filter_by(project_id=project_id).delete()
+            db.session.commit()
+            flash('Все ключевые слова успешно удалены', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ошибка при удалении ключевых слов: {str(e)}', 'error')
+            current_app.logger.error(f"Error clearing all keywords for project {project_id}: {str(e)}")
+    
     return redirect(url_for('main.project_keywords', id=project_id))
 
 @bp.route('/project/<int:project_id>/get_data', methods=['POST'])
@@ -490,29 +487,6 @@ def get_project_data(project_id):
     except Exception as e:
         current_app.logger.error(f"Error in get_project_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-@bp.route('/project/<int:project_id>/keywords/clear_all', methods=['POST'])
-@login_required
-def clear_all_keywords(project_id):
-    form = KeywordForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        try:
-            # Удаляем все ключевые слова проекта
-            Keyword.query.filter_by(project_id=project_id).delete()
-            db.session.commit()
-            flash('Все ключевые слова успешно удалены', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при удалении ключевых слов: {str(e)}', 'error')
-    else:
-        flash('Ошибка валидации формы', 'error')
-    
-    return redirect(url_for('main.project_keywords', id=project_id))
 
 @bp.route('/project/<int:project_id>/positions/report', methods=['GET'])
 @login_required
@@ -848,33 +822,31 @@ def refresh_project_data(id):
         flash('Произошла ошибка при обновлении данных', 'error')
         return redirect(url_for('main.project', id=id))
 
-@bp.route('/project/<int:id>/refresh_positions', methods=['POST'])
+@bp.route('/project/<int:project_id>/refresh_positions', methods=['POST'])
 @login_required
-def refresh_positions(id):
+def refresh_positions(project_id):
     try:
-        current_app.logger.info(f"Получен запрос на обновление позиций для проекта {id}")
+        current_app.logger.info(f"Получен запрос на обновление позиций для проекта {project_id}")
         
-        project = Project.query.get_or_404(id)
+        project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
-            current_app.logger.warning(f"Отказано в доступе к проекту {id} для пользователя {current_user.id}")
+            current_app.logger.warning(f"Отказано в доступе к проекту {project_id} для пользователя {current_user.id}")
             return jsonify({
                 'status': 'error',
                 'message': 'У вас нет доступа к этому проекту'
             })
 
         # Проверяем, не запущен ли уже процесс
-        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{id}.pid')
+        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{project_id}.pid')
+        process_running = False
+        
         if os.path.exists(pid_file):
             try:
                 with open(pid_file, 'r') as f:
                     pid = int(f.read().strip())
                 # Проверяем, существует ли процесс
                 os.kill(pid, 0)  # Проверка существования процесса
-                current_app.logger.warning(f"Процесс обновления позиций для проекта {id} уже запущен (PID: {pid})")
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Процесс обновления уже запущен'
-                })
+                process_running = True
             except (ProcessLookupError, ValueError, OSError):
                 # Если процесс не существует, удаляем pid файл
                 try:
@@ -882,22 +854,29 @@ def refresh_positions(id):
                 except OSError:
                     pass
 
+        if process_running:
+            current_app.logger.warning(f"Процесс обновления позиций для проекта {project_id} уже запущен (PID: {pid})")
+            return jsonify({
+                'status': 'error',
+                'message': 'Процесс обновления уже запущен'
+            })
+        
         # Создаем директорию для логов если её нет
         log_dir = os.path.join(current_app.root_path, '..', 'logs')
         os.makedirs(log_dir, exist_ok=True)
 
-        current_app.logger.info(f"Запускаем обновление позиций для проекта {id}")
+        current_app.logger.info(f"Запускаем обновление позиций для проекта {project_id}")
         
         # Запускаем процесс обновления позиций
         try:
-            update_project_positions(id)
-            current_app.logger.info(f"Процесс обновления позиций для проекта {id} успешно запущен")
+            update_project_positions(project_id)
+            current_app.logger.info(f"Процесс обновления позиций для проекта {project_id} успешно запущен")
             return jsonify({
                 'status': 'success',
                 'message': 'Процесс обновления позиций запущен'
             })
         except Exception as e:
-            current_app.logger.error(f"Ошибка при запуске обновления позиций для проекта {id}: {str(e)}")
+            current_app.logger.error(f"Ошибка при запуске обновления позиций для проекта {project_id}: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'message': str(e)

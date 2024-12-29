@@ -17,3 +17,11 @@ class ProjectForm(FlaskForm):
     validate_metrika = SubmitField('Проверить Яндекс.Метрику')
     validate_webmaster = SubmitField('Проверить Яндекс.Вебмастер')
     submit = SubmitField('Создать проект')
+
+class KeywordForm(FlaskForm):
+    keywords = TextAreaField('Ключевые слова', validators=[DataRequired()])
+    submit = SubmitField('Добавить ключевые слова')
+
+class URLForm(FlaskForm):
+    urls = TextAreaField('URLs', validators=[DataRequired()])
+    submit = SubmitField('Добавить URLs')

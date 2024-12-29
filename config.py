@@ -17,6 +17,3 @@ class Config:
     
     # App settings
     APP_NAME = os.environ.get('APP_NAME', 'PROMIT SEO')
-    
-    # Директория для логов
-    LOG_DIR = os.path.join(basedir, 'logs')

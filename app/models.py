@@ -31,12 +31,14 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64))
     url = db.Column(db.String(256))
+    yandex_metrika_counter = db.Column(db.String(256))
+    yandex_metrika_token = db.Column(db.String(256))
     yandex_webmaster_host = db.Column(db.String(256))
     yandex_webmaster_token = db.Column(db.String(256))
     yandex_webmaster_user_id = db.Column(db.String(256))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    keywords = db.relationship('Keyword', backref='project', lazy='dynamic')
-    urls = db.relationship('URL', backref='project', lazy='dynamic')  # Добавляем отношение с URL
+    keywords = db.relationship('Keyword', backref='project', lazy='dynamic', cascade='all, delete-orphan')
+    urls = db.relationship('URL', backref='project', lazy='dynamic', cascade='all, delete-orphan')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -54,9 +56,9 @@ class Region(db.Model):
 class Keyword(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     keyword = db.Column(db.String(256))
-    project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
-    region_id = db.Column(db.Integer, db.ForeignKey('region.id'))  # Добавляем foreign key
-    positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic')
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id', ondelete='CASCADE'))
+    region_id = db.Column(db.Integer, db.ForeignKey('region.id'))
+    positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic', cascade='all, delete-orphan')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_webmaster_update = db.Column(db.DateTime)
     
@@ -77,13 +79,13 @@ class KeywordPosition(db.Model):
 class URL(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(500), nullable=False)
-    project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id', ondelete='CASCADE'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_metrika_update = db.Column(db.DateTime)
-    traffic_data = db.relationship('URLTraffic', backref='url', lazy='dynamic')
+    traffic_data = db.relationship('URLTraffic', backref='url', lazy='dynamic', cascade='all, delete-orphan')
 
 class URLTraffic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    url_id = db.Column(db.Integer, db.ForeignKey('url.id'))
+    url_id = db.Column(db.Integer, db.ForeignKey('url.id', ondelete='CASCADE'))
     visits = db.Column(db.Integer)
     check_date = db.Column(db.DateTime, default=datetime.utcnow)
