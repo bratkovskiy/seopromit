@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Отчет по позициям</h1>
+        <div class="flex space-x-4">
+            <button id="refreshBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
+                <span>Обновить данные</span>
+                <span id="refreshSpinner" class="ml-2 hidden">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+            </button>
+            <button id="exportBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                Выгрузить в Excel
+            </button>
+            <a href="{{ url_for('main.project', id=project.id) }}" 
+               class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                Вернуться к проекту
+            </a>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-6">
+        <h2 class="text-xl font-semibold mb-4">Фильтры</h2>
+        <form id="filterForm" class="flex flex-wrap gap-4">
+            <div class="w-full md:w-1/3">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="keyword">
+                    Ключевое слово
+                </label>
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                       id="keyword" type="text" placeholder="Поиск по ключевому слову">
+            </div>
+            <div class="w-full md:w-1/3">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="position">
+                    Позиция
+                </label>
+                <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="position">
+                    <option value="">Все позиции</option>
+                    <option value="top1">ТОП1 (1.0-1.9)</option>
+                    <option value="top3">ТОП3 (1.0-3.9)</option>
+                    <option value="top5">ТОП5 (1.0-5.9)</option>
+                    <option value="top10">ТОП10 (1.0-10.9)</option>
+                    <option value="top100">ТОП100+</option>
+                </select>
+            </div>
+            <div class="w-full md:w-1/3">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="daterange">
+                    Период
+                </label>
+                <div class="flex space-x-2">
+                    <input type="date" id="dateFrom" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                    <input type="date" id="dateTo" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                </div>
+            </div>
+            <div class="w-full flex justify-end space-x-4">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Применить
+                </button>
+                <button type="reset" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    Очистить
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Статистика -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Динамика изменений -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Динамика изменений</h2>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Всего ключевых слов:</span>
+                    <span class="font-semibold">{{ changes_data.total_keywords }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Улучшили позиции:</span>
+                    <span class="text-green-600 font-semibold">{{ changes_data.improved }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Ухудшили позиции:</span>
+                    <span class="text-red-600 font-semibold">{{ changes_data.worsened }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Без изменений:</span>
+                    <span class="text-gray-600 font-semibold">{{ changes_data.unchanged }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Распределение по позициям -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Распределение по позициям</h2>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">ТОП-10:</span>
+                    <span class="font-semibold">{{ changes_data.top10 }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">ТОП-25:</span>
+                    <span class="font-semibold">{{ changes_data.top25 }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">ТОП-100:</span>
+                    <span class="font-semibold">{{ changes_data.top100 }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">За ТОП-100:</span>
+                    <span class="font-semibold">{{ changes_data.over100 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- График изменения позиций -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
+        <h2 class="text-xl font-semibold mb-4">График изменения позиций</h2>
+        <div id="positionsChart" class="w-full" style="height: 400px;"></div>
+    </div>
+
+    <!-- Основная таблица позиций -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Позиции ключевых слов</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Ключевое слово
+                        </th>
+                        {% for date in check_dates %}
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {{ date }}<br>
+                            {% with %}
+                                {% set ns = namespace(found=false, period='') %}
+                                {% for keyword in positions_data.keys() %}
+                                    {% if not ns.found and positions_data[keyword][date]['data_period'] %}
+                                        {% set ns.found = true %}
+                                        {% set ns.period = positions_data[keyword][date]['data_period'] %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% if ns.found %}
+                                    <span class="text-xs text-gray-400">Период: {{ ns.period }}</span>
+                                {% endif %}
+                            {% endwith %}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for keyword in positions_data.keys()|sort %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ keyword }}
+                        </td>
+                        {% for date in check_dates %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ "%.1f"|format(positions_data[keyword][date]['position']) if positions_data[keyword][date]['position'] is not none else '-' }}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Таблицы изменений -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Максимальный рост -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Максимальный рост позиций</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Ключевое слово
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Предыдущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Текущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Изменение
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in biggest_improvements %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ item.keyword }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.previous_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.current_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                                +{{ "%.1f"|format(item.change) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Максимальное падение -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Максимальное падение позиций</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Ключевое слово
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Предыдущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Текущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Изменение
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in biggest_drops %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ item.keyword }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.previous_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.current_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                                {{ "%.1f"|format(item.change) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Данные для графика
+    const chartData = {{ avg_positions|tojson }};
+    const dates = chartData.map(item => item.date);
+    const values = chartData.map(item => item.value);
+
+    // Настройки графика
+    const options = {
+        series: [{
+            name: 'Средняя позиция',
+            data: values
+        }],
+        chart: {
+            type: 'line',
+            height: 400,
+            toolbar: {
+                show: false
+            }
+        },
+        stroke: {
+            curve: 'smooth',
+            width: 2
+        },
+        markers: {
+            size: 4,
+            colors: ['#3b82f6'],
+            strokeWidth: 0
+        },
+        xaxis: {
+            categories: dates,
+            title: {
+                text: 'Дата'
+            }
+        },
+        yaxis: {
+            reversed: true,
+            title: {
+                text: 'Позиция'
+            }
+        },
+        grid: {
+            borderColor: '#f3f4f6',
+            strokeDashArray: 4
+        },
+        colors: ['#3b82f6']
+    };
+
+    const chart = new ApexCharts(document.querySelector("#positionsChart"), options);
+    chart.render();
+
+    // Обработчик обновления данных
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+        const spinner = document.getElementById('refreshSpinner');
+        spinner.classList.remove('hidden');
+        
+        fetch(`/project/${project.id}/refresh_positions`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Ошибка при обновлении данных');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ошибка при обновлении данных');
+            })
+            .finally(() => {
+                spinner.classList.add('hidden');
+            });
+    });
+
+    // Обработчик фильтров
+    document.getElementById('filterForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const keyword = document.getElementById('keyword').value;
+        const position = document.getElementById('position').value;
+        const dateFrom = document.getElementById('dateFrom').value;
+        const dateTo = document.getElementById('dateTo').value;
+
+        // Применяем фильтры к таблицам
+        const tables = document.querySelectorAll('table');
+        tables.forEach(table => {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                let show = true;
+                const keywordCell = row.querySelector('td:first-child');
+                const positionCell = row.querySelector('td:nth-child(2)');
+
+                // Фильтр по ключевому слову
+                if (keyword && !keywordCell.textContent.toLowerCase().includes(keyword.toLowerCase())) {
+                    show = false;
+                }
+
+                // Фильтр по позиции
+                if (position && positionCell) {
+                    const pos = parseFloat(positionCell.textContent);
+                    switch (position) {
+                        case 'top1':
+                            if (pos < 1.0 || pos >= 2.0) show = false;
+                            break;
+                        case 'top3':
+                            if (pos < 1.0 || pos >= 4.0) show = false;
+                            break;
+                        case 'top5':
+                            if (pos < 1.0 || pos >= 6.0) show = false;
+                            break;
+                        case 'top10':
+                            if (pos < 1.0 || pos >= 11.0) show = false;
+                            break;
+                        case 'top100':
+                            if (pos < 100.0) show = false;
+                            break;
+                    }
+                }
+
+                row.style.display = show ? '' : 'none';
+            });
+        });
+    });
+
+    // Обработчик экспорта
+    document.getElementById('exportBtn').addEventListener('click', function() {
+        const keyword = document.getElementById('keyword').value;
+        const position = document.getElementById('position').value;
+        const dateFrom = document.getElementById('dateFrom').value;
+        const dateTo = document.getElementById('dateTo').value;
+
+        window.location.href = `/project/${project.id}/positions/export?keyword=${keyword}&position=${position}&date_from=${dateFrom}&date_to=${dateTo}`;
+    });
+});
+</script>
+{% endblock %}

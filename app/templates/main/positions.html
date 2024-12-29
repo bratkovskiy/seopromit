@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Верхние кнопки -->
+    <div class="flex justify-end mb-6 space-x-4">
+        <button id="refreshBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
+            <span>Обновить данные</span>
+            <span id="refreshSpinner" class="ml-2 hidden">
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </span>
+        </button>
+        <a href="{{ url_for('main.export_positions', project_id=project.id, keyword=keyword_filter, position=position_filter, date_from=date_from, date_to=date_to) }}" 
+           class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            Выгрузить в Excel
+        </a>
+        <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}" 
+           class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
+            <span>Отчет</span>
+            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+        </a>
+        <a href="{{ url_for('main.project', id=project.id) }}" 
+           class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+            Вернуться к проекту
+        </a>
+    </div>
+
+    <!-- Блок фильтров -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <form id="filterForm" method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="keyword">
+                    Ключевое слово
+                </label>
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                       id="keyword" name="keyword" type="text" value="{{ keyword_filter }}">
+            </div>
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="position">
+                    Позиция
+                </label>
+                <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                        id="position" name="position">
+                    <option value="">Все позиции</option>
+                    <option value="top1" {% if position_filter == 'top1' %}selected{% endif %}>ТОП1</option>
+                    <option value="top3" {% if position_filter == 'top3' %}selected{% endif %}>ТОП3</option>
+                    <option value="top5" {% if position_filter == 'top5' %}selected{% endif %}>ТОП5</option>
+                    <option value="top10" {% if position_filter == 'top10' %}selected{% endif %}>ТОП10</option>
+                    <option value="top100plus" {% if position_filter == 'top100plus' %}selected{% endif %}>ТОП100+</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="date_range">
+                    Период
+                </label>
+                <input type="text" id="date_range" name="date_range" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                       value="{{ date_from + ' to ' + date_to if date_from and date_to else '' }}">
+                <input type="hidden" id="date_from" name="date_from" value="{{ date_from }}">
+                <input type="hidden" id="date_to" name="date_to" value="{{ date_to }}">
+            </div>
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Применить
+                </button>
+                <button type="button" id="clearFilters" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    Очистить
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- График -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <canvas id="positionsChart" class="w-full h-64"></canvas>
+    </div>
+
+    <!-- Основная таблица -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 overflow-x-auto">
+        <table class="min-w-full">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="px-6 py-3 border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Ключевое слово
+                    </th>
+                    {% for date in dates %}
+                    <th class="px-6 py-3 border-b-2 border-gray-200 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        {{ date }}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Строка средних значений -->
+                <tr class="bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        Средняя позиция
+                    </td>
+                    {% for date in dates %}
+                    {% set avg = averages[date] %}
+                    {% set prev_avg = averages[dates[loop.index]] if not loop.first else none %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center 
+                        {% if prev_avg and avg < prev_avg %}text-green-600
+                        {% elif prev_avg and avg > prev_avg %}text-red-600
+                        {% else %}text-gray-900{% endif %}">
+                        {{ "%.1f"|format(avg) }}
+                        {% if prev_avg %}
+                            {% if avg < prev_avg %}
+                            <span class="text-green-600">↑</span>
+                            {% elif avg > prev_avg %}
+                            <span class="text-red-600">↓</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <!-- Строки с данными -->
+                {% for keyword, data in keywords_data.items() %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ keyword }}
+                    </td>
+                    {% for date in dates %}
+                    {% set pos = data[date]|default('-') %}
+                    {% set prev_pos = data[dates[loop.index]]|default(none) if not loop.first else none %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center
+                        {% if prev_pos and pos != '-' and prev_pos != '-' %}
+                            {% if pos < prev_pos %}text-green-600
+                            {% elif pos > prev_pos %}text-red-600
+                            {% else %}text-gray-900{% endif %}
+                        {% else %}text-gray-900{% endif %}">
+                        {{ "%.1f"|format(pos) if pos != '-' else '-' }}
+                        {% if prev_pos and pos != '-' and prev_pos != '-' %}
+                            {% if pos < prev_pos %}
+                            <span class="text-green-600">↑</span>
+                            {% elif pos > prev_pos %}
+                            <span class="text-red-600">↓</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Таблицы изменений -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Рост позиций -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h3 class="text-lg font-semibold mb-4">Максимальный рост позиций</h3>
+            <table class="min-w-full">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Ключевое слово
+                        </th>
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Текущая позиция
+                        </th>
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Предыдущая позиция
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for keyword, positions in top_growth.items() %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ keyword }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600">
+                            {{ "%.1f"|format(positions.current) }} ↑
+                            <span class="text-xs">(+{{ "%.1f"|format(positions.diff) }})</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900">
+                            {{ "%.1f"|format(positions.previous) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- Падение позиций -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h3 class="text-lg font-semibold mb-4">Максимальное падение позиций</h3>
+            <table class="min-w-full">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Ключевое слово
+                        </th>
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Текущая позиция
+                        </th>
+                        <th class="px-6 py-3 border-b-2 border-gray-200 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Предыдущая позиция
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for keyword, positions in top_drop.items() %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ keyword }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-red-600">
+                            {{ "%.1f"|format(positions.current) }} ↓
+                            <span class="text-xs">(-{{ "%.1f"|format(positions.diff|abs) }})</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900">
+                            {{ "%.1f"|format(positions.previous) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация выбора даты
+    flatpickr("#date_range", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        locale: "ru",
+        defaultDate: [
+            document.getElementById('date_from').value,
+            document.getElementById('date_to').value
+        ],
+        onChange: function(selectedDates, dateStr, instance) {
+            if (selectedDates.length === 2) {
+                document.getElementById('date_from').value = instance.formatDate(selectedDates[0], "Y-m-d");
+                document.getElementById('date_to').value = instance.formatDate(selectedDates[1], "Y-m-d");
+            }
+        }
+    });
+
+    // Очистка фильтров
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        document.getElementById('keyword').value = '';
+        document.getElementById('position').value = '';
+        document.getElementById('date_range').value = '';
+        document.getElementById('date_from').value = '';
+        document.getElementById('date_to').value = '';
+        document.getElementById('filterForm').submit();
+    });
+
+    // Инициализация графика
+    const ctx = document.getElementById('positionsChart').getContext('2d');
+    const chartData = {{ chart_data|tojson }};
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.dates,
+            datasets: [{
+                label: 'Средняя позиция',
+                data: chartData.positions,
+                borderColor: 'rgb(59, 130, 246)',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                tension: 0.1,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    reverse: true,
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'Позиция'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Дата'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            }
+        }
+    });
+
+    // Обработка обновления данных
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+        const button = this;
+        const spinner = document.getElementById('refreshSpinner');
+        
+        button.disabled = true;
+        spinner.classList.remove('hidden');
+        
+        fetch(`/project/${projectId}/keywords/refresh_positions`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Произошла ошибка при обновлении данных');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Произошла ошибка при обновлении данных');
+            })
+            .finally(() => {
+                button.disabled = false;
+                spinner.classList.add('hidden');
+            });
+    });
+});
+</script>
+{% endblock %}

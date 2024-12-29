@@ -11,6 +11,9 @@ import logging
 import threading
 import time
 from urllib.parse import urlparse
+import io
+import xlsxwriter
+from flask import send_file
 
 logger = logging.getLogger(__name__)
 
@@ -481,11 +484,224 @@ def clear_all_keywords(project_id):
     
     return redirect(url_for('main.project_keywords', id=project_id))
 
-@bp.route('/project/<int:id>/update', methods=['GET'])
+@bp.route('/project/<int:project_id>/positions/report', methods=['GET'])
 @login_required
-def update_project_data(id):
+def project_positions_report(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Get all positions with related data
+    positions = db.session.query(
+        KeywordPosition.position,
+        KeywordPosition.check_date,
+        KeywordPosition.data_date_start,
+        KeywordPosition.data_date_end,
+        Keyword.keyword
+    ).join(
+        Keyword, KeywordPosition.keyword_id == Keyword.id
+    ).filter(
+        Keyword.project_id == project_id
+    ).order_by(
+        KeywordPosition.check_date.desc()
+    ).all()
+
+    # Get unique keywords
+    keywords = sorted(list({pos.keyword for pos in positions}))
+
+    # Get all check dates without limit
+    check_dates = sorted(list({pos.check_date.strftime('%Y-%m-%d') for pos in positions}), reverse=True)
+
+    # Prepare data for template
+    positions_data = {}
+    for keyword in keywords:
+        positions_data[keyword] = {}
+        for date in check_dates:
+            positions_data[keyword][date] = {
+                'position': None,
+                'data_period': None
+            }
+
+    # Fill in the data
+    for pos in positions:
+        check_date = pos.check_date.strftime('%Y-%m-%d')
+        positions_data[pos.keyword][check_date] = {
+            'position': pos.position,
+            'data_period': f"{pos.data_date_start.strftime('%Y-%m-%d')} - {pos.data_date_end.strftime('%Y-%m-%d')}"
+        }
+
+    # Calculate changes and statistics
+    changes_data = {
+        'total_keywords': len(keywords),
+        'improved': 0,
+        'worsened': 0,
+        'unchanged': 0,
+        'top10': 0,
+        'top25': 0,
+        'top100': 0,
+        'over100': 0
+    }
+
+    position_changes = []
+
+    if len(check_dates) >= 2:
+        latest_date = check_dates[0]
+        prev_date = check_dates[1]
+
+        for keyword, dates in positions_data.items():
+            latest_pos = dates[latest_date]['position']
+            prev_pos = dates[prev_date]['position']
+
+            if latest_pos is not None and prev_pos is not None:
+                change = prev_pos - latest_pos
+
+                # Count changes
+                if change > 0:
+                    changes_data['improved'] += 1
+                elif change < 0:
+                    changes_data['worsened'] += 1
+                else:
+                    changes_data['unchanged'] += 1
+
+                # Count distribution
+                if latest_pos <= 10:
+                    changes_data['top10'] += 1
+                elif latest_pos <= 25:
+                    changes_data['top25'] += 1
+                elif latest_pos <= 100:
+                    changes_data['top100'] += 1
+                else:
+                    changes_data['over100'] += 1
+
+                # Add to position changes list
+                position_changes.append({
+                    'keyword': keyword,
+                    'current_position': latest_pos,
+                    'previous_position': prev_pos,
+                    'change': change
+                })
+
+    # Sort and get biggest changes
+    position_changes.sort(key=lambda x: abs(x['change']), reverse=True)
+    biggest_improvements = [x for x in position_changes if x['change'] > 0][:10]
+    biggest_drops = [x for x in position_changes if x['change'] < 0][:10]
+
+    # Calculate average positions for chart
+    avg_positions = []
+    for date in check_dates:
+        positions_list = [
+            dates[date]['position']
+            for dates in positions_data.values()
+            if dates[date]['position'] is not None
+        ]
+        if positions_list:
+            avg = round(sum(positions_list) / len(positions_list), 1)
+            avg_positions.append({
+                'date': date,
+                'value': avg
+            })
+
+    return render_template('main/positions_report.html',
+                         project=project,
+                         positions_data=positions_data,
+                         check_dates=check_dates,
+                         avg_positions=avg_positions,
+                         changes_data=changes_data,
+                         biggest_improvements=biggest_improvements,
+                         biggest_drops=biggest_drops)
+
+@bp.route('/project/<int:project_id>/positions/table')
+@login_required
+def project_positions_table(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Get all keyword positions for the project
+    positions = (KeywordPosition.query
+                .join(Keyword)
+                .filter(Keyword.project_id == project_id)
+                .order_by(KeywordPosition.check_date.desc())
+                .all())
+
+    # Group positions by keyword and date
+    positions_by_keyword = {}
+    for pos in positions:
+        keyword = pos.keyword.keyword
+        if keyword not in positions_by_keyword:
+            positions_by_keyword[keyword] = []
+        positions_by_keyword[keyword].append({
+            'date': pos.check_date.strftime('%Y-%m-%d'),
+            'position': pos.position
+        })
+
+    # Sort positions for each keyword by date
+    for keyword in positions_by_keyword:
+        positions_by_keyword[keyword].sort(key=lambda x: x['date'], reverse=True)
+
+    return render_template('main/positions_table.html',
+                         project=project,
+                         positions_data=positions_by_keyword)
+
+@bp.route('/project/<int:project_id>/positions/changes')
+@login_required
+def project_positions_changes(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Get all keyword positions for the project
+    positions = (KeywordPosition.query
+                .join(Keyword)
+                .filter(Keyword.project_id == project_id)
+                .order_by(KeywordPosition.check_date.desc())
+                .all())
+
+    # Group positions by keyword and date
+    positions_by_keyword = {}
+    for pos in positions:
+        keyword = pos.keyword.keyword
+        if keyword not in positions_by_keyword:
+            positions_by_keyword[keyword] = []
+        positions_by_keyword[keyword].append({
+            'date': pos.check_date.strftime('%Y-%m-%d'),
+            'position': pos.position
+        })
+
+    # Sort positions for each keyword by date
+    for keyword in positions_by_keyword:
+        positions_by_keyword[keyword].sort(key=lambda x: x['date'], reverse=True)
+
+    # Calculate position changes
+    position_changes = []
+    for keyword in positions_by_keyword:
+        positions_list = positions_by_keyword[keyword]
+        if len(positions_list) > 1:
+            current_pos = positions_list[0]['position']
+            previous_pos = positions_list[1]['position']
+            change = previous_pos - current_pos
+            position_changes.append({
+                'keyword': keyword,
+                'current_position': current_pos,
+                'previous_position': previous_pos,
+                'change': change
+            })
+
+    # Sort by absolute change value for biggest changes
+    position_changes.sort(key=lambda x: abs(x['change']), reverse=True)
+
+    return render_template('main/positions_changes.html',
+                         project=project,
+                         changes_data=position_changes)
+
+@bp.route('/project/<int:project_id>/update', methods=['GET'])
+@login_required
+def update_project_data(project_id):
     try:
-        project = Project.query.get_or_404(id)
+        project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
             flash('У вас нет доступа к этому проекту', 'error')
             return redirect(url_for('main.dashboard'))
@@ -494,12 +710,12 @@ def update_project_data(id):
         time.sleep(2)  # Имитация работы
         flash('Данные успешно обновлены', 'success')
         
-        return redirect(url_for('main.project', id=id))
+        return redirect(url_for('main.project', id=project_id))
 
     except Exception as e:
         current_app.logger.error(f"Error updating data: {str(e)}")
         flash('Произошла ошибка при обновлении данных', 'error')
-        return redirect(url_for('main.project', id=id))
+        return redirect(url_for('main.project', id=project_id))
 
 @bp.route('/project/<int:id>/refresh', methods=['GET'])
 @login_required
@@ -674,3 +890,72 @@ def refresh_positions(id):
         logger.error(f"Ошибка при обновлении позиций: {str(e)}")
         flash(f'Ошибка при обновлении позиций: {str(e)}', 'error')
         return redirect(url_for('main.project', id=id))
+
+@bp.route('/project/<int:project_id>/positions/export')
+@login_required
+def export_positions(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Get filter parameters
+    keyword = request.args.get('keyword', '')
+    position_filter = request.args.get('position', '')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+
+    # Base query
+    query = (KeywordPosition.query
+             .join(Keyword)
+             .filter(Keyword.project_id == project_id))
+
+    # Apply filters
+    if keyword:
+        query = query.filter(Keyword.keyword.ilike(f'%{keyword}%'))
+
+    if position_filter:
+        if position_filter == 'top1':
+            query = query.filter(KeywordPosition.position >= 1.0, KeywordPosition.position < 2.0)
+        elif position_filter == 'top3':
+            query = query.filter(KeywordPosition.position >= 1.0, KeywordPosition.position < 4.0)
+        elif position_filter == 'top5':
+            query = query.filter(KeywordPosition.position >= 1.0, KeywordPosition.position < 6.0)
+        elif position_filter == 'top10':
+            query = query.filter(KeywordPosition.position >= 1.0, KeywordPosition.position < 11.0)
+        elif position_filter == 'top100':
+            query = query.filter(KeywordPosition.position >= 100.0)
+
+    if date_from:
+        query = query.filter(KeywordPosition.date >= datetime.strptime(date_from, '%Y-%m-%d'))
+    if date_to:
+        query = query.filter(KeywordPosition.date <= datetime.strptime(date_to, '%Y-%m-%d'))
+
+    # Get positions ordered by date and keyword
+    positions = query.order_by(KeywordPosition.date.desc(), Keyword.keyword).all()
+
+    # Create Excel file
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+
+    # Add headers
+    headers = ['Ключевое слово', 'Позиция', 'Дата']
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header)
+
+    # Add data
+    for row, position in enumerate(positions, 1):
+        worksheet.write(row, 0, position.keyword.keyword)
+        worksheet.write(row, 1, position.position)
+        worksheet.write(row, 2, position.date.strftime('%Y-%m-%d'))
+
+    workbook.close()
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'positions_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
