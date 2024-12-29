@@ -1,4 +1,4 @@
-from flask import render_template, flash, redirect, url_for, request, jsonify, current_app
+from flask import render_template, flash, redirect, url_for, request, jsonify, current_app, session
 from flask_login import login_required, current_user
 from app import db, socketio, csrf
 from app.main import bp
@@ -14,7 +14,9 @@ from urllib.parse import urlparse
 import io
 import xlsxwriter
 from flask import send_file
-import builtins  # Импортируем модуль builtins
+import builtins
+from app.tasks.update_positions import update_project_positions  # Добавляем импорт
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +63,24 @@ def new_project():
 def project(id):
     project = Project.query.get_or_404(id)
     if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
-        return redirect(url_for('main.dashboard'))
-    return render_template('main/project.html', title=project.name, project=project)
+        flash('У вас нет доступа к этому проекту')
+        return redirect(url_for('main.index'))
+        
+    # Проверяем наличие региона по умолчанию
+    default_region = Region.query.filter_by(code=213).first()  # 213 - код Москвы
+    if not default_region:
+        default_region = Region(name='Москва', code=213)
+        db.session.add(default_region)
+        db.session.commit()
+        current_app.logger.info('Создан регион по умолчанию (Москва)')
+    
+    # Проверяем и обновляем регион для ключевых слов
+    for keyword in project.keywords:
+        if not keyword.region_id:
+            keyword.region_id = default_region.id
+    db.session.commit()
+        
+    return render_template('main/project.html', project=project)
 
 @bp.route('/project/<int:id>/keywords', methods=['GET', 'POST'])
 @login_required
@@ -819,94 +836,67 @@ def refresh_project_data(id):
         flash('Произошла ошибка при обновлении данных', 'error')
         return redirect(url_for('main.project', id=id))
 
-@bp.route('/project/<int:id>/refresh_positions', methods=['GET'])
+@bp.route('/project/<int:id>/refresh_positions', methods=['POST'])
 @login_required
 def refresh_positions(id):
     try:
+        current_app.logger.info(f"Получен запрос на обновление позиций для проекта {id}")
+        
         project = Project.query.get_or_404(id)
         if project.user_id != current_user.id:
-            flash('У вас нет доступа к этому проекту', 'error')
-            return redirect(url_for('main.dashboard'))
+            current_app.logger.warning(f"Отказано в доступе к проекту {id} для пользователя {current_user.id}")
+            return jsonify({
+                'status': 'error',
+                'message': 'У вас нет доступа к этому проекту'
+            })
 
-        # Создаем клиент API
-        api = YandexWebmasterAPI(
-            oauth_token=project.yandex_webmaster_token,
-            user_id=project.yandex_webmaster_user_id
-        )
+        # Проверяем, не запущен ли уже процесс
+        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{id}.pid')
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+                # Проверяем, существует ли процесс
+                os.kill(pid, 0)  # Проверка существования процесса
+                current_app.logger.warning(f"Процесс обновления позиций для проекта {id} уже запущен (PID: {pid})")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Процесс обновления уже запущен'
+                })
+            except (ProcessLookupError, ValueError, OSError):
+                # Если процесс не существует, удаляем pid файл
+                try:
+                    os.remove(pid_file)
+                except OSError:
+                    pass
 
-        # Получаем все ключевые слова проекта
-        keywords = [kw.keyword for kw in project.keywords]
-        if not keywords:
-            flash('У проекта нет ключевых слов для обновления', 'error')
-            return redirect(url_for('main.project', id=id))
+        # Создаем директорию для логов если её нет
+        log_dir = os.path.join(current_app.root_path, '..', 'logs')
+        os.makedirs(log_dir, exist_ok=True)
 
-        # Получаем позиции для всех ключевых слов
-        positions = api.get_keywords_positions(project.yandex_webmaster_host, keywords)
+        current_app.logger.info(f"Запускаем обновление позиций для проекта {id}")
         
-        if positions is None:  # Явно проверяем на None
-            flash('Ошибка при получении данных от API Яндекс.Вебмастер. Проверьте логи для деталей.', 'error')
-            return redirect(url_for('main.project', id=id))
-            
-        if not positions:
-            flash('Не удалось получить позиции ни для одного ключевого слова', 'error')
-            return redirect(url_for('main.project', id=id))
-
-        # Обновляем позиции в базе данных
-        success_count = 0
-        error_count = 0
-        for keyword_text, (position, date_range) in positions.items():
-            if position is not None:
-                keyword = Keyword.query.filter_by(
-                    project_id=id,
-                    keyword=keyword_text
-                ).first()
-                
-                if keyword:
-                    try:
-                        # Создаем новую запись в таблице KeywordPosition
-                        keyword_position = KeywordPosition(
-                            keyword_id=keyword.id,
-                            position=position,
-                            check_date=datetime.utcnow()
-                        )
-                        
-                        # Парсим даты из строки формата "dd.mm - dd.mm"
-                        if date_range:
-                            start_date_str, end_date_str = date_range.split(' - ')
-                            current_year = datetime.now().year
-                            
-                            # Преобразуем строки дат в объекты datetime
-                            start_date = datetime.strptime(f"{start_date_str}.{current_year}", '%d.%m.%Y')
-                            end_date = datetime.strptime(f"{end_date_str}.{current_year}", '%d.%m.%Y')
-                            
-                            # Устанавливаем даты
-                            keyword_position.data_date_start = start_date
-                            keyword_position.data_date_end = end_date
-                            
-                        db.session.add(keyword_position)
-                        keyword.last_webmaster_update = datetime.utcnow()
-                        success_count += 1
-                    except Exception as e:
-                        logger.error(f"Ошибка при обновлении позиции для '{keyword_text}': {e}")
-                        error_count += 1
-
-        if success_count > 0:
-            db.session.commit()
-            message = f'Успешно обновлено {success_count} из {len(keywords)} ключевых слов'
-            if error_count > 0:
-                message += f' (ошибок: {error_count})'
-            flash(message, 'success')
-        else:
-            db.session.rollback()
-            flash('Не удалось обновить ни одно ключевое слово', 'error')
-            
-        return redirect(url_for('main.project', id=id))
+        # Запускаем процесс обновления позиций
+        try:
+            update_project_positions(id)
+            current_app.logger.info(f"Процесс обновления позиций для проекта {id} успешно запущен")
+            return jsonify({
+                'status': 'success',
+                'message': 'Процесс обновления позиций запущен'
+            })
+        except Exception as e:
+            current_app.logger.error(f"Ошибка при запуске обновления позиций для проекта {id}: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            })
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Ошибка при обновлении позиций: {str(e)}")
-        flash(f'Ошибка при обновлении позиций: {str(e)}', 'error')
-        return redirect(url_for('main.project', id=id))
+        current_app.logger.error(f"Критическая ошибка при обработке запроса на обновление позиций: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        })
 
 @bp.route('/project/<int:project_id>/generate_test_data')
 @login_required
@@ -1047,3 +1037,91 @@ def test_chart():
         'positions': [8.5, 6.3]
     }
     return render_template('main/test_chart.html', title='Тестовый график', chart_data=data, zip=builtins.zip)
+
+@bp.route('/project/<int:id>/update_status')
+@login_required
+def check_update_status(id):
+    try:
+        project = Project.query.get_or_404(id)
+        if project.user_id != current_user.id:
+            return jsonify({
+                'status': 'error',
+                'message': 'У вас нет доступа к этому проекту'
+            })
+        
+        # Проверяем флаг в сессии
+        session_key = f'update_completed_{id}'
+        if session.get(session_key):
+            # Если флаг установлен, сбрасываем его и возвращаем статус not_running
+            session.pop(session_key, None)
+            return jsonify({
+                'status': 'not_running',
+                'message': 'Процесс обновления не запущен'
+            })
+        
+        # Проверяем наличие ошибок в логах
+        try:
+            log_file = os.path.join(current_app.root_path, '..', 'logs', 'update_positions.log')
+            if os.path.exists(log_file):
+                with open(log_file, 'r', encoding='cp1251') as f:
+                    last_lines = f.readlines()[-10:]  # Читаем последние 10 строк
+                    for line in reversed(last_lines):
+                        if str(id) in line and 'ERROR' in line:
+                            return jsonify({
+                                'status': 'error',
+                                'message': line.split('ERROR - ')[-1].strip()
+                            })
+        except Exception as e:
+            current_app.logger.error(f"Ошибка при чтении лог-файла: {e}")
+        
+        # Проверяем, запущен ли процесс
+        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{id}.pid')
+        process_running = False
+        
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+                # Проверяем, существует ли процесс
+                os.kill(pid, 0)  # Проверка существования процесса
+                process_running = True
+            except (ProcessLookupError, ValueError, OSError):
+                # Если процесс не существует, удаляем pid файл
+                try:
+                    os.remove(pid_file)
+                except OSError:
+                    pass
+        
+        if process_running:
+            return jsonify({
+                'status': 'running',
+                'message': 'Процесс обновления позиций выполняется'
+            })
+        
+        # Проверяем, было ли обновление успешным
+        one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
+        recent_update = KeywordPosition.query.join(Keyword).filter(
+            Keyword.project_id == id,
+            KeywordPosition.check_date >= one_minute_ago
+        ).first()
+        
+        if recent_update:
+            # Устанавливаем флаг в сессии
+            session[session_key] = True
+            return jsonify({
+                'status': 'completed',
+                'success': True,
+                'message': 'Позиции успешно обновлены'
+            })
+        
+        return jsonify({
+            'status': 'not_running',
+            'message': 'Процесс обновления не запущен'
+        })
+            
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при проверке статуса: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        })

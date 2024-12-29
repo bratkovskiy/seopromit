@@ -36,10 +36,11 @@
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">Ключевые слова</h3>
                 <div class="flex space-x-2">
-                    <a href="{{ url_for('main.refresh_positions', id=project.id) }}"
+                    <button id="refresh-positions-btn"
+                       onclick="refreshPositions({{ project.id }})"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
                         Обновить позиции
-                    </a>
+                    </button>
                     <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}"
                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
                         <span>Отчет</span>
@@ -55,11 +56,11 @@
             </div>
             <div class="border-t border-gray-200">
                 <div class="px-4 py-5 sm:px-6">
-                    {% if project.keywords %}
+                    {% if project.keywords.count() > 0 %}
                     <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Количество ключевых слов</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ project.keywords|length }}</dd>
+                            <dd class="mt-1 text-sm text-gray-900">{{ project.keywords.count() }}</dd>
                         </div>
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Регионы</dt>
@@ -161,4 +162,146 @@
         {{ keywords_table|safe }}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let updateCheckInterval = null;
+let completedShown = false;  // Флаг для отслеживания показа уведомления о завершении
+
+// Проверяем состояние при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    const button = document.getElementById('refresh-positions-btn');
+    const projectId = {{ project.id }};
+    
+    // Проверяем статус обновления при загрузке страницы
+    checkUpdateStatus(projectId);
+});
+
+function setButtonLoading(button) {
+    button.disabled = true;
+    button.innerHTML = `
+        <span class="inline-flex items-center">
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            ПОЛУЧАЕМ ДАННЫЕ
+        </span>
+    `;
+    button.classList.add('opacity-75', 'cursor-not-allowed');
+}
+
+function setButtonNormal(button) {
+    button.disabled = false;
+    button.innerHTML = 'Обновить позиции';
+    button.classList.remove('opacity-75', 'cursor-not-allowed');
+    if (updateCheckInterval) {
+        clearInterval(updateCheckInterval);
+        updateCheckInterval = null;
+    }
+}
+
+function startUpdateCheck(projectId) {
+    // Очищаем предыдущий интервал если есть
+    if (updateCheckInterval) {
+        clearInterval(updateCheckInterval);
+    }
+    
+    completedShown = false;
+    
+    // Запускаем периодическую проверку каждые 5 секунд
+    updateCheckInterval = setInterval(() => checkUpdateStatus(projectId), 5000);
+    // И сразу делаем первую проверку
+    checkUpdateStatus(projectId);
+}
+
+function checkUpdateStatus(projectId) {
+    const button = document.getElementById('refresh-positions-btn');
+    
+    fetch(`/project/${projectId}/update_status`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'completed' && !completedShown) {
+                completedShown = true;
+                setButtonNormal(button);
+                showNotification('success', data.message);
+                setTimeout(() => location.reload(), 1000);
+                if (updateCheckInterval) {
+                    clearInterval(updateCheckInterval);
+                    updateCheckInterval = null;
+                }
+            } else if (data.status === 'running') {
+                setButtonLoading(button);
+                if (!button.dataset.showedRunning) {
+                    showNotification('info', 'Обновление позиций выполняется...');
+                    button.dataset.showedRunning = 'true';
+                }
+            } else if (data.status === 'not_running') {
+                setButtonNormal(button);
+                if (updateCheckInterval) {
+                    clearInterval(updateCheckInterval);
+                    updateCheckInterval = null;
+                }
+            } else if (data.status === 'error') {
+                setButtonNormal(button);
+                showNotification('error', data.message || 'Произошла ошибка при обновлении позиций');
+                if (updateCheckInterval) {
+                    clearInterval(updateCheckInterval);
+                    updateCheckInterval = null;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            setButtonNormal(button);
+            if (updateCheckInterval) {
+                clearInterval(updateCheckInterval);
+                updateCheckInterval = null;
+            }
+        });
+}
+
+function refreshPositions(projectId) {
+    const button = document.getElementById('refresh-positions-btn');
+    if (button.disabled) return; // Предотвращаем повторные клики
+    
+    setButtonLoading(button);
+    button.dataset.showedRunning = 'false'; // Сбрасываем флаг показа уведомления
+
+    fetch(`/project/${projectId}/refresh_positions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showNotification('info', 'Запущено обновление позиций...');
+            startUpdateCheck(projectId);
+        } else {
+            showNotification('error', data.message || 'Не удалось запустить обновление позиций');
+            setButtonNormal(button);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при запуске обновления позиций');
+        setButtonNormal(button);
+    });
+}
+
+function showNotification(type, message) {
+    const notification = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500' : 
+                   type === 'error' ? 'bg-red-500' : 
+                   'bg-blue-500';
+    notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white ${bgColor} shadow-lg z-50`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 5000);
+}
+</script>
 {% endblock %}
