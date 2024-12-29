@@ -36,6 +36,7 @@ class Project(db.Model):
     yandex_webmaster_user_id = db.Column(db.String(256))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     keywords = db.relationship('Keyword', backref='project', lazy='dynamic')
+    urls = db.relationship('URL', backref='project', lazy='dynamic')  # Добавляем отношение с URL
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):

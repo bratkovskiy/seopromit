@@ -77,9 +77,9 @@
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Последнее обновление</dt>
                             <dd class="mt-1 text-sm text-gray-900">
-                                {% set latest_keyword = project.keywords|sort(attribute='updated_at', reverse=true)|first %}
-                                {% if latest_keyword and latest_keyword.updated_at %}
-                                    {{ latest_keyword.updated_at.strftime('%d.%m.%Y') }}
+                                {% set latest_keyword = project.keywords.order_by(Keyword.last_webmaster_update.desc()).first() %}
+                                {% if latest_keyword and latest_keyword.last_webmaster_update %}
+                                    {{ latest_keyword.last_webmaster_update.strftime('%d.%m.%Y') }}
                                 {% else %}
                                     Нет данных
                                 {% endif %}
@@ -88,7 +88,7 @@
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Последние данные из Вебмастера</dt>
                             <dd class="mt-1 text-sm text-gray-900">
-                                {% set latest_webmaster = project.keywords|sort(attribute='last_webmaster_update', reverse=true)|first %}
+                                {% set latest_webmaster = project.keywords.order_by(Keyword.last_webmaster_update.desc()).first() %}
                                 {% if latest_webmaster and latest_webmaster.last_webmaster_update %}
                                     {{ latest_webmaster.last_webmaster_update.strftime('%d.%m.%Y') }}
                                 {% else %}
@@ -125,14 +125,14 @@
                     <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Количество URLs</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ project.urls|length }}</dd>
+                            <dd class="mt-1 text-sm text-gray-900">{{ project.urls.count() }}</dd>
                         </div>
                         <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">Последнее обновление</dt>
                             <dd class="mt-1 text-sm text-gray-900">
-                                {% set latest_url = project.urls|sort(attribute='updated_at', reverse=true)|first %}
-                                {% if latest_url and latest_url.updated_at %}
-                                    {{ latest_url.updated_at.strftime('%d.%m.%Y') }}
+                                {% set latest_url = project.urls.order_by(URL.created_at.desc()).first() %}
+                                {% if latest_url and latest_url.created_at %}
+                                    {{ latest_url.created_at.strftime('%d.%m.%Y') }}
                                 {% else %}
                                     Нет данных
                                 {% endif %}
@@ -141,7 +141,7 @@
                         <div class="sm:col-span-2">
                             <dt class="text-sm font-medium text-gray-500">Последние данные из Метрики</dt>
                             <dd class="mt-1 text-sm text-gray-900">
-                                {% set latest_metrika = project.urls|sort(attribute='last_metrika_update', reverse=true)|first %}
+                                {% set latest_metrika = project.urls.order_by(URL.last_metrika_update.desc()).first() %}
                                 {% if latest_metrika and latest_metrika.last_metrika_update %}
                                     {{ latest_metrika.last_metrika_update.strftime('%d.%m.%Y') }}
                                 {% else %}

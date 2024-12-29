@@ -4,7 +4,7 @@ from app import db, socketio, csrf
 from app.main import bp
 from app.main.forms import ProjectForm
 from flask_wtf import FlaskForm
-from app.models import Project, User, Keyword, KeywordPosition, URL, URLTraffic, Region
+from app.models import User, Project, Region, Keyword, KeywordPosition, URL, URLTraffic
 from app.yandex import YandexMetrikaAPI, YandexWebmasterAPI
 from datetime import datetime, timedelta
 import logging
@@ -19,6 +19,18 @@ from app.tasks.update_positions import update_project_positions  # Добавл�
 import os
 
 logger = logging.getLogger(__name__)
+
+@bp.context_processor
+def inject_models():
+    return {
+        'User': User,
+        'Project': Project,
+        'Region': Region,
+        'Keyword': Keyword,
+        'KeywordPosition': KeywordPosition,
+        'URL': URL,
+        'URLTraffic': URLTraffic
+    }
 
 class KeywordForm(FlaskForm):
     pass
