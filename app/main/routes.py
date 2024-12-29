@@ -277,11 +277,11 @@ def clear_all_urls(project_id):
 def delete_project(id):
     project = Project.query.get_or_404(id)
     if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
+        flash('У вас нет прав для удаления этого проекта.', 'error')
         return redirect(url_for('main.dashboard'))
     db.session.delete(project)
     db.session.commit()
-    flash('Project deleted.', 'success')
+    flash('Проект успешно удален.', 'success')
     return redirect(url_for('main.dashboard'))
 
 @bp.route('/validate_metrika', methods=['POST'])

@@ -62,7 +62,7 @@ class Keyword(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_webmaster_update = db.Column(db.DateTime)  # Дата последнего получения данных из Вебмастера
-    positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic')
+    positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic', cascade='all, delete-orphan')
 
 class URL(db.Model):
     id = db.Column(db.Integer, primary_key=True)
