@@ -1,4 +1,4 @@
-from flask import render_template, flash, redirect, url_for, request
+from flask import render_template, flash, redirect, url_for, request, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import random
@@ -14,17 +14,22 @@ def generate_password(length=12):
     characters = string.ascii_letters + string.digits + string.punctuation
     return ''.join(random.choice(characters) for i in range(length))
 
+@bp.route('/login/', methods=['GET', 'POST'])
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
+        current_app.logger.info('User already authenticated')
         return redirect(url_for('main.dashboard'))
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
+        current_app.logger.info(f'Login attempt for user: {form.username.data}')
         if user is None or not user.check_password(form.password.data):
+            current_app.logger.warning(f'Failed login attempt for user: {form.username.data}')
             flash('Неверное имя пользователя или пароль', 'error')
             return redirect(url_for('auth.login'))
         login_user(user, remember=form.remember_me.data)
+        current_app.logger.info(f'Successful login for user: {user.username}')
         return redirect(url_for('main.dashboard'))
     return render_template('auth/login.html', title='Вход', form=form)
 

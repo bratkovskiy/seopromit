@@ -33,7 +33,7 @@ def create_app(config_class=Config):
     db.init_app(app)
     login_manager.init_app(app)
     migrate.init_app(app, db)
-    socketio.init_app(app)
+    socketio.init_app(app, manage_session=False)
     csrf.init_app(app)
     
     # Set up login configuration
@@ -55,7 +55,7 @@ def create_app(config_class=Config):
     app.register_blueprint(main_bp)
     
     from app.auth import bp as auth_bp
-    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(auth_bp)
     
     return app
 
