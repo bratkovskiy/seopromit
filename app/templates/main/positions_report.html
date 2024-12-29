@@ -24,6 +24,41 @@
         </div>
     </div>
 
+    <!-- Фильтры -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Фильтры</h2>
+        <div class="flex flex-wrap gap-6">
+            <!-- Поиск по ключевому слову -->
+            <div class="flex flex-col space-y-2">
+                <label class="text-sm font-medium text-gray-700">Поиск по ключевому слову</label>
+                <input type="text" id="keywordSearch" placeholder="Введите ключевое слово" class="w-64 rounded border-gray-300 shadow-sm">
+            </div>
+
+            <!-- Фильтр по позициям -->
+            <div class="flex flex-col space-y-2">
+                <label class="text-sm font-medium text-gray-700">Фильтр по позициям</label>
+                <select id="positionFilter" class="rounded border-gray-300 shadow-sm">
+                    <option value="">Все позиции</option>
+                    <option value="top1">ТОП1</option>
+                    <option value="top3">ТОП3</option>
+                    <option value="top5">ТОП5</option>
+                    <option value="top10">ТОП10</option>
+                    <option value="top100plus">ТОП100+</option>
+                </select>
+            </div>
+
+            <!-- Кнопки управления фильтрами -->
+            <div class="flex items-end space-x-2">
+                <button id="applyFilters" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Применить
+                </button>
+                <button id="resetFilters" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    Очистить
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Статистика -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <!-- Динамика изменений -->
@@ -50,24 +85,28 @@
         </div>
 
         <!-- Распределение по позициям -->
-        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
-            <h2 class="text-xl font-semibold mb-4">Распределение по позициям</h2>
-            <div class="space-y-4">
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-600">ТОП-10:</span>
-                    <span class="font-semibold">{{ changes_data.top10 }}</span>
+        <div class="bg-white shadow-md rounded px-6 pt-4 pb-4">
+            <h2 class="text-lg font-semibold mb-4">Распределение по позициям</h2>
+            <div class="space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП1:</span>
+                    <span class="font-medium" data-distribution="top1">0</span>
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-600">ТОП-25:</span>
-                    <span class="font-semibold">{{ changes_data.top25 }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП3:</span>
+                    <span class="font-medium" data-distribution="top3">0</span>
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-600">ТОП-100:</span>
-                    <span class="font-semibold">{{ changes_data.top100 }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП5:</span>
+                    <span class="font-medium" data-distribution="top5">0</span>
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-600">За ТОП-100:</span>
-                    <span class="font-semibold">{{ changes_data.over100 }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП10:</span>
+                    <span class="font-medium" data-distribution="top10">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП100+:</span>
+                    <span class="font-medium" data-distribution="top100plus">0</span>
                 </div>
             </div>
         </div>
@@ -239,121 +278,122 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/filters.js') }}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const data = [];
-    {% for date in check_dates %}
-    data.push({
-        date: "{{ date }}",
-        position: {{ "%.1f"|format(
-            positions_data.values()|map(attribute=date)|map(attribute='position')|reject('none')|list|sum / 
-            positions_data.values()|map(attribute=date)|map(attribute='position')|reject('none')|list|length
-        ) if positions_data.values()|map(attribute=date)|map(attribute='position')|reject('none')|list|length > 0 else 0 }}
+    document.addEventListener('DOMContentLoaded', function() {
+        const data = [];
+        {% for pos in avg_positions %}
+        data.push({
+            x: "{{ pos.x }}",
+            y: {{ pos.y }}
+        });
+        {% endfor %}
+
+        // Создаем график
+        const margin = {top: 20, right: 20, bottom: 30, left: 50};
+        const width = document.getElementById('chart-container').offsetWidth - margin.left - margin.right;
+        const height = document.getElementById('chart-container').offsetHeight - margin.top - margin.bottom;
+
+        // Очищаем контейнер
+        d3.select("#chart-container svg").remove();
+
+        const svg = d3.select("#chart-container")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Определяем шкалы
+        const x = d3.scaleTime()
+            .domain(d3.extent(data, d => new Date(d.x)))
+            .range([0, width]);
+
+        const y = d3.scaleLinear()
+            .domain([0, d3.max(data, d => d.y) * 1.1])
+            .range([0, height]);
+
+        // Создаем линию
+        const line = d3.line()
+            .x(d => x(new Date(d.x)))
+            .y(d => y(d.y));
+
+        // Добавляем оси
+        svg.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x));
+
+        svg.append("g")
+            .call(d3.axisLeft(y));
+
+        // Добавляем линию
+        svg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", line);
+
+        // Добавляем точки
+        svg.selectAll(".dot")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "dot")
+            .attr("cx", d => x(new Date(d.x)))
+            .attr("cy", d => y(d.y))
+            .attr("r", 5)
+            .style("fill", "steelblue")
+            .on("mouseover", function(event, d) {
+                const tooltip = d3.select("#tooltip");
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                tooltip.html(`Дата: ${d.x}<br/>Позиция: ${d.y}`)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 28) + "px")
+                    .style("display", "block");
+            })
+            .on("mouseout", function(d) {
+                d3.select("#tooltip").style("display", "none");
+            });
+
+        // Обработчики для кнопок
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            const spinner = document.getElementById('refreshSpinner');
+            spinner.classList.remove('hidden');
+            this.disabled = true;
+
+            fetch(`/project/{{ project.id }}/positions/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Ошибка при обновлении данных');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ошибка при обновлении данных');
+            })
+            .finally(() => {
+                spinner.classList.add('hidden');
+                this.disabled = false;
+            });
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            window.location.href = `/project/{{ project.id }}/positions/export`;
+        });
     });
-    {% endfor %}
-
-    if (data.length === 0) return;
-
-    // Размеры графика
-    const container = document.getElementById('chart-container');
-    const margin = {top: 20, right: 30, bottom: 50, left: 50};
-    const width = container.clientWidth - margin.left - margin.right;
-    const height = container.clientHeight - margin.top - margin.bottom;
-
-    // Очищаем контейнер
-    container.innerHTML = '<div id="tooltip" class="absolute hidden bg-gray-800 text-white p-2 rounded shadow-lg text-sm"></div>';
-
-    // Создаем SVG
-    const svg = d3.select('#chart-container')
-        .append('svg')
-        .attr('width', width + margin.left + margin.right)
-        .attr('height', height + margin.top + margin.bottom)
-        .append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    // Шкалы
-    const x = d3.scaleBand()
-        .range([0, width])
-        .domain(data.map(d => d.date))
-        .padding(0.1);
-
-    const y = d3.scaleLinear()
-        .range([height, 0])
-        .domain([0, d3.max(data, d => d.position) * 1.1]);
-
-    // Оси
-    svg.append('g')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .style('text-anchor', 'end')
-        .attr('dx', '-.8em')
-        .attr('dy', '.15em')
-        .attr('transform', 'rotate(-45)');
-
-    svg.append('g')
-        .call(d3.axisLeft(y));
-
-    // Линия
-    const line = d3.line()
-        .x(d => x(d.date) + x.bandwidth() / 2)
-        .y(d => y(d.position))
-        .curve(d3.curveMonotoneX);
-
-    // Добавляем линию
-    svg.append('path')
-        .datum(data)
-        .attr('fill', 'none')
-        .attr('stroke', '#2196F3')
-        .attr('stroke-width', 2)
-        .attr('d', line);
-
-    // Добавляем точки
-    const dots = svg.selectAll('circle')
-        .data(data)
-        .enter()
-        .append('circle')
-        .attr('cx', d => x(d.date) + x.bandwidth() / 2)
-        .attr('cy', d => y(d.position))
-        .attr('r', 4)
-        .attr('fill', '#2196F3');
-
-    // Подписи к осям
-    svg.append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', 0 - margin.left)
-        .attr('x', 0 - (height / 2))
-        .attr('dy', '1em')
-        .style('text-anchor', 'middle')
-        .text('Позиция');
-
-    svg.append('text')
-        .attr('transform', `translate(${width/2}, ${height + margin.bottom - 5})`)
-        .style('text-anchor', 'middle')
-        .text('Дата');
-
-    // Всплывающие подсказки
-    const tooltip = d3.select('#tooltip');
-    
-    dots.on('mouseover', function(event, d) {
-        const [x, y] = d3.pointer(event);
-        
-        tooltip
-            .style('display', 'block')
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 10) + 'px')
-            .html(`Дата: ${d.date}<br>Позиция: ${d.position.toFixed(1)}`);
-
-        d3.select(this)
-            .attr('r', 6)
-            .attr('fill', '#1976D2');
-    })
-    .on('mouseout', function() {
-        tooltip.style('display', 'none');
-        d3.select(this)
-            .attr('r', 4)
-            .attr('fill', '#2196F3');
-    });
-});
 </script>
 {% endblock %}

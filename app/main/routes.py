@@ -547,17 +547,20 @@ def project_positions_report(project_id):
     position_changes = []
 
     # Для каждого ключевого слова
-    for keyword, dates in positions_data.items():
-        # Находим первую и последнюю позицию
-        positions_list = [(date, data['position']) for date, data in dates.items() if data['position'] is not None]
-        if len(positions_list) >= 2:
-            positions_list.sort()  # Сортируем по дате
-            first_date, first_pos = positions_list[0]
-            last_date, last_pos = positions_list[-1]
+    for keyword in keywords:
+        # Получаем все позиции для ключевого слова с датами
+        keyword_positions = [(date, positions_data[keyword][date]['position']) 
+                           for date in check_dates 
+                           if positions_data[keyword][date]['position'] is not None]
+        
+        if len(keyword_positions) >= 2:
+            # Сортируем по дате (уже отсортировано в обратном порядке)
+            current_date, current_pos = keyword_positions[0]  # Самая новая дата
+            previous_date, previous_pos = keyword_positions[1]  # Предыдущая дата
             
-            change = first_pos - last_pos  # Изменение = старая позиция - новая позиция
+            change = previous_pos - current_pos  # Положительное значение = улучшение
 
-            # Count changes
+            # Считаем изменения
             if change > 0:
                 changes_data['improved'] += 1
             elif change < 0:
@@ -565,28 +568,36 @@ def project_positions_report(project_id):
             else:
                 changes_data['unchanged'] += 1
 
-            # Count distribution (используем последнюю позицию)
-            if last_pos <= 10:
+            # Считаем распределение по текущей позиции
+            if current_pos <= 10:
                 changes_data['top10'] += 1
-            elif last_pos <= 25:
+            elif current_pos <= 25:
                 changes_data['top25'] += 1
-            elif last_pos <= 100:
+            elif current_pos <= 100:
                 changes_data['top100'] += 1
             else:
                 changes_data['over100'] += 1
 
-            # Add to position changes list
+            # Добавляем в список изменений
             position_changes.append({
                 'keyword': keyword,
-                'current_position': last_pos,
-                'previous_position': first_pos,
+                'current_position': current_pos,
+                'previous_position': previous_pos,
                 'change': change
             })
 
-    # Sort and get biggest changes
-    position_changes.sort(key=lambda x: abs(x['change']), reverse=True)
-    biggest_improvements = [x for x in position_changes if x['change'] > 0][:10]
-    biggest_drops = [x for x in position_changes if x['change'] < 0][:10]
+    # Сортируем и получаем наибольшие изменения
+    biggest_improvements = sorted(
+        [x for x in position_changes if x['change'] > 0],
+        key=lambda x: x['change'],
+        reverse=True
+    )[:10]
+
+    biggest_drops = sorted(
+        [x for x in position_changes if x['change'] < 0],
+        key=lambda x: abs(x['change']),
+        reverse=True
+    )[:10]
 
     # Calculate average positions for chart
     avg_positions = []
@@ -897,15 +908,66 @@ def refresh_positions(id):
         flash(f'Ошибка при обновлении позиций: {str(e)}', 'error')
         return redirect(url_for('main.project', id=id))
 
-@bp.route('/test-chart')
+@bp.route('/project/<int:project_id>/generate_test_data')
 @login_required
-def test_chart():
-    # Тестовые данные для графика
-    data = {
-        'dates': ['2024-12-28', '2024-12-29'],
-        'positions': [8.5, 6.3]
-    }
-    return render_template('main/test_chart.html', title='Тестовый график', chart_data=data, zip=builtins.zip)
+def generate_test_data(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Получаем все ключевые слова проекта
+    keywords = Keyword.query.filter_by(project_id=project_id).all()
+    
+    if not keywords:
+        flash('Добавьте ключевые слова перед генерацией тестовых данных', 'error')
+        return redirect(url_for('main.project_keywords', id=project_id))
+
+    # Удаляем старые позиции
+    KeywordPosition.query.filter(
+        KeywordPosition.keyword_id.in_([k.id for k in keywords])
+    ).delete(synchronize_session=False)
+
+    # Генерируем 10 дат проверок
+    base_date = datetime(2024, 12, 1)  # Начинаем с 1 декабря 2024
+    check_dates = [base_date - timedelta(days=i*3) for i in range(10)]  # Каждые 3 дня
+
+    # Для каждого ключевого слова генерируем позиции
+    for keyword in keywords:
+        # Определяем тренд для ключевого слова
+        if keywords.index(keyword) == 0:  # Первое слово - рост
+            start_pos = 50
+            end_pos = 5
+        elif keywords.index(keyword) == 1:  # Второе слово - падение
+            start_pos = 10
+            end_pos = 80
+        else:  # Остальные - случайные колебания
+            start_pos = 30
+            end_pos = 40
+
+        # Генерируем позиции с учетом тренда
+        positions = []
+        for i in range(10):
+            progress = i / 9  # От 0 до 1
+            base_position = start_pos + (end_pos - start_pos) * progress
+            
+            # Добавляем случайные колебания ±5 позиций
+            from random import uniform
+            position = max(1, base_position + uniform(-5, 5))
+            
+            # Создаем запись о позиции
+            position_record = KeywordPosition(
+                keyword_id=keyword.id,
+                position=position,
+                check_date=check_dates[i],
+                data_date_start=check_dates[i] - timedelta(days=7),
+                data_date_end=check_dates[i]
+            )
+            db.session.add(position_record)
+
+    db.session.commit()
+    flash('Тестовые данные успешно сгенерированы', 'success')
+    return redirect(url_for('main.project_positions_report', project_id=project_id))
 
 @bp.route('/project/<int:project_id>/positions/export')
 @login_required
@@ -975,3 +1037,13 @@ def export_positions(project_id):
         as_attachment=True,
         download_name=f'positions_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
+
+@bp.route('/test-chart')
+@login_required
+def test_chart():
+    # Тестовые данные для графика
+    data = {
+        'dates': ['2024-12-28', '2024-12-29'],
+        'positions': [8.5, 6.3]
+    }
+    return render_template('main/test_chart.html', title='Тестовый график', chart_data=data, zip=builtins.zip)
