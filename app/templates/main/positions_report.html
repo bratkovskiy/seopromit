@@ -5,15 +5,6 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Отчет по позициям</h1>
         <div class="flex space-x-4">
-            <button id="refreshBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
-                <span>Обновить данные</span>
-                <span id="refreshSpinner" class="ml-2 hidden">
-                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                </span>
-            </button>
             <button id="exportBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                 Выгрузить в Excel
             </button>
@@ -375,44 +366,6 @@
             .on("mouseout", function(d) {
                 d3.select("#tooltip").style("display", "none");
             });
-
-        // Обработчики для кнопок
-        document.getElementById('refreshBtn').addEventListener('click', function() {
-            const spinner = document.getElementById('refreshSpinner');
-            spinner.classList.remove('hidden');
-            this.disabled = true;
-
-            fetch(`/project/{{ project.id }}/positions/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                }
-            })
-            .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
-                return response.json();
-            })
-            .then(data => {
-                if (data.status === 'success') {
-                    location.reload();
-                } else {
-                    alert('Ошибка при обновлении данных');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ошибка при обновлении данных');
-            })
-            .finally(() => {
-                spinner.classList.add('hidden');
-                this.disabled = false;
-            });
-        });
-
-        document.getElementById('exportBtn').addEventListener('click', function() {
-            window.location.href = `/project/{{ project.id }}/positions/export`;
-        });
     });
 </script>
 <style>
