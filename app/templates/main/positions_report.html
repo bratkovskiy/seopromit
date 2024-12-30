@@ -134,6 +134,9 @@
                         {% for date in check_dates|reverse %}
                         <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             {{ date }}<br>
+                            {% if positions_data[positions_data.keys()|list|first][date]['data_date_start'] %}
+                                <span class="text-xs text-gray-400">{{ positions_data[positions_data.keys()|list|first][date]['data_date_start'] }} - {{ positions_data[positions_data.keys()|list|first][date]['data_date_end'] }}</span><br>
+                            {% endif %}
                             <span class="text-xs text-gray-400">Яндекс</span>
                         </th>
                         {% endfor %}

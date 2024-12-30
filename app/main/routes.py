@@ -382,6 +382,7 @@ def project_positions_report(project_id):
     # Группируем данные по ключевым словам и датам
     positions_data = {}
     check_dates = set()
+    date_intervals = {}  # Добавляем словарь для хранения интервалов дат
     avg_positions = []
     
     for record in position_records:
@@ -392,13 +393,17 @@ def project_positions_report(project_id):
         if keyword not in positions_data:
             positions_data[keyword] = {}
             
-        # Определяем период проверки на основе даты
-        check_hour = record.check_date.strftime('%H:%M')
-        data_period = f"{check_hour}"
+        # Сохраняем интервал дат для каждой проверки
+        if date not in date_intervals:
+            date_intervals[date] = {
+                'start': record.data_date_start.strftime('%Y-%m-%d') if record.data_date_start else None,
+                'end': record.data_date_end.strftime('%Y-%m-%d') if record.data_date_end else None
+            }
             
         positions_data[keyword][date] = {
             'position': record.position,
-            'data_period': data_period,
+            'data_date_start': record.data_date_start.strftime('%Y-%m-%d') if record.data_date_start else None,
+            'data_date_end': record.data_date_end.strftime('%Y-%m-%d') if record.data_date_end else None,
             'change': None,  # Будет вычислено позже
             'change_value': None  # Будет вычислено позже
         }
@@ -840,12 +845,12 @@ def export_positions(project_id):
             query = query.filter(KeywordPosition.position >= 100.0)
 
     if date_from:
-        query = query.filter(KeywordPosition.date >= datetime.strptime(date_from, '%Y-%m-%d'))
+        query = query.filter(KeywordPosition.check_date >= datetime.strptime(date_from, '%Y-%m-%d'))
     if date_to:
-        query = query.filter(KeywordPosition.date <= datetime.strptime(date_to, '%Y-%m-%d'))
+        query = query.filter(KeywordPosition.check_date <= datetime.strptime(date_to, '%Y-%m-%d'))
 
     # Get positions ordered by date and keyword
-    positions = query.order_by(KeywordPosition.date.desc(), Keyword.keyword).all()
+    positions = query.order_by(KeywordPosition.check_date.desc(), Keyword.keyword).all()
 
     # Create Excel file
     output = io.BytesIO()
@@ -861,7 +866,7 @@ def export_positions(project_id):
     for row, position in enumerate(positions, 1):
         worksheet.write(row, 0, position.keyword.keyword)
         worksheet.write(row, 1, position.position)
-        worksheet.write(row, 2, position.date.strftime('%Y-%m-%d'))
+        worksheet.write(row, 2, position.check_date.strftime('%Y-%m-%d'))
 
     workbook.close()
     output.seek(0)
