@@ -17,8 +17,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         rows.forEach(row => {
             if (row.style.display !== 'none') {
+                // Получаем последнюю позицию (самая новая дата)
                 const cells = Array.from(row.querySelectorAll('td'));
-                const position = parseFloat(cells[1].textContent); // Берем позицию из первого столбца после ключевого слова
+                const lastPositionCell = cells[cells.length - 1];
+                const position = parseFloat(lastPositionCell.textContent);
 
                 if (!isNaN(position)) {
                     if (position >= 1.0 && position < 2.0) distribution.top1++;
@@ -49,9 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const keyword = row.querySelector('td:first-child').textContent.toLowerCase();
             const cells = Array.from(row.querySelectorAll('td'));
             
-            // Получаем значение первой позиции (самая новая дата)
-            const positionCell = cells[1];
-            const position = parseFloat(positionCell.textContent);
+            // Получаем значение последней позиции (самая новая дата)
+            const lastPositionCell = cells[cells.length - 1];
+            const position = parseFloat(lastPositionCell.textContent);
             
             console.log(`Строка ${rowIndex}:`, {
                 keyword,
@@ -65,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`Строка ${rowIndex}: не прошла фильтр по ключевому слову`);
             }
 
-            // Фильтр по позициям (применяется только к самой новой дате)
+            // Фильтр по позициям
             if (show && activeFilters.position && !isNaN(position)) {
                 let showByPosition = false;
                 
@@ -128,4 +130,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Инициализация распределения при загрузке
     updatePositionDistribution();
+
+    // Обработчик обновления данных
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+        const spinner = document.getElementById('refreshSpinner');
+        spinner.classList.remove('hidden');
+        this.disabled = true;
+
+        fetch(`/project/${projectId}/positions/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                location.reload();
+            } else {
+                alert('Ошибка при обновлении данных');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка при обновлении данных');
+        })
+        .finally(() => {
+            spinner.classList.add('hidden');
+            this.disabled = false;
+        });
+    });
+
+    // Обработчик экспорта в Excel
+    document.getElementById('exportBtn').addEventListener('click', function() {
+        window.location.href = `/project/${projectId}/positions/export`;
+    });
 });

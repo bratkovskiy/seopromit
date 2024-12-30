@@ -1,4 +1,5 @@
-from flask import render_template, flash, redirect, url_for, request, jsonify, current_app, session
+from datetime import datetime
+from flask import render_template, flash, redirect, url_for, request, jsonify, current_app, session, send_file
 from flask_login import login_required, current_user
 from flask_wtf import FlaskForm
 from app import db, socketio, csrf
@@ -6,14 +7,12 @@ from app.main import bp
 from app.main.forms import ProjectForm, URLForm, KeywordForm
 from app.models import User, Project, Keyword, KeywordPosition, URL, URLTraffic, Region
 from app.yandex import YandexMetrikaAPI, YandexWebmasterAPI
-from datetime import datetime, timedelta
 import logging
 import threading
 import time
 from urllib.parse import urlparse
 import io
 import xlsxwriter
-from flask import send_file
 import builtins
 from app.tasks.update_positions import update_project_positions  # Добавляем импорт
 import os
@@ -365,7 +364,7 @@ def get_project_data(project_id):
         current_app.logger.error(f"Error in get_project_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@bp.route('/project/<int:project_id>/positions/report', methods=['GET'])
+@bp.route('/project/<int:project_id>/positions/report')
 @login_required
 def project_positions_report(project_id):
     project = Project.query.get_or_404(project_id)
@@ -373,117 +372,81 @@ def project_positions_report(project_id):
         flash('У вас нет доступа к этому проекту', 'error')
         return redirect(url_for('main.dashboard'))
 
-    # Получаем все позиции с сортировкой по дате (от новых к старым)
-    positions = db.session.query(
-        KeywordPosition.position,
-        KeywordPosition.check_date,
-        Keyword.keyword
-    ).join(
-        Keyword, KeywordPosition.keyword_id == Keyword.id
-    ).filter(
-        Keyword.project_id == project_id
-    ).order_by(
-        KeywordPosition.check_date.desc()
-    ).all()
+    # Получаем все записи о позициях
+    position_records = (KeywordPosition.query
+                       .join(Keyword)
+                       .filter(Keyword.project_id == project_id)
+                       .order_by(KeywordPosition.check_date.asc())
+                       .all())
 
-    # Получаем уникальные ключевые слова
-    keywords = sorted(list({pos.keyword for pos in positions}))
-
-    # Получаем даты проверок и сортируем их от новых к старым
-    check_dates = sorted(list({pos.check_date.strftime('%Y-%m-%d') for pos in positions}), reverse=True)
-
-    # Подготавливаем данные для шаблона
+    # Группируем данные по ключевым словам и датам
     positions_data = {}
-    for keyword in keywords:
-        positions_data[keyword] = {}
-        for date in check_dates:
-            positions_data[keyword][date] = {
-                'position': None
-            }
+    check_dates = set()
+    avg_positions = []
+    
+    for record in position_records:
+        keyword = record.keyword.keyword
+        date = record.check_date.strftime('%Y-%m-%d')
+        check_dates.add(date)
+        
+        if keyword not in positions_data:
+            positions_data[keyword] = {}
+            
+        positions_data[keyword][date] = {
+            'position': record.position,
+            'data_period': 'Яндекс'  # или другой источник данных
+        }
 
-    # Заполняем данные
-    for pos in positions:
-        check_date = pos.check_date.strftime('%Y-%m-%d')
-        positions_data[pos.keyword][check_date]['position'] = pos.position
+    # Сортируем даты
+    check_dates = sorted(list(check_dates))
 
-    # Вычисляем статистику изменений
+    # Вычисляем средние позиции для графика
+    for date in check_dates:
+        positions = [data[date]['position'] 
+                    for data in positions_data.values() 
+                    if date in data and data[date]['position'] > 0]
+        if positions:
+            avg = sum(positions) / len(positions)
+            avg_positions.append({'x': date, 'y': round(avg, 1)})
+
+    # Подготавливаем данные об изменениях
     changes_data = {
-        'total_keywords': len(keywords),
+        'total_keywords': len(positions_data),
         'improved': 0,
         'worsened': 0,
-        'unchanged': 0,
-        'top10': 0,
-        'top25': 0,
-        'top100': 0,
-        'over100': 0
+        'unchanged': 0
     }
 
-    position_changes = []
+    biggest_improvements = []
+    biggest_drops = []
 
-    # Для каждого ключевого слова
-    for keyword in keywords:
-        # Получаем все позиции для ключевого слова с датами
-        keyword_positions = [(date, positions_data[keyword][date]['position']) 
-                           for date in check_dates 
-                           if positions_data[keyword][date]['position'] is not None]
-        
-        if len(keyword_positions) >= 2:
-            # Даты уже отсортированы от новых к старым
-            current_date, current_pos = keyword_positions[0]
-            previous_date, previous_pos = keyword_positions[1]
+    for keyword, data in positions_data.items():
+        dates = sorted(data.keys())
+        if len(dates) >= 2:
+            current = data[dates[-1]]['position']
+            previous = data[dates[-2]]['position']
             
-            change = previous_pos - current_pos  # Положительное значение = улучшение
+            if current > 0 and previous > 0:
+                change = previous - current
+                change_data = {
+                    'keyword': keyword,
+                    'current_position': current,
+                    'previous_position': previous,
+                    'change': abs(change)
+                }
+                
+                if change > 0:
+                    changes_data['improved'] += 1
+                    biggest_improvements.append(change_data)
+                elif change < 0:
+                    changes_data['worsened'] += 1
+                    biggest_drops.append(change_data)
+                else:
+                    changes_data['unchanged'] += 1
 
-            # Считаем изменения
-            if change > 0:
-                changes_data['improved'] += 1
-            elif change < 0:
-                changes_data['worsened'] += 1
-            else:
-                changes_data['unchanged'] += 1
-
-            # Считаем распределение по текущей позиции
-            if current_pos <= 10:
-                changes_data['top10'] += 1
-            elif current_pos <= 25:
-                changes_data['top25'] += 1
-            elif current_pos <= 100:
-                changes_data['top100'] += 1
-            else:
-                changes_data['over100'] += 1
-
-            # Добавляем в список изменений
-            position_changes.append({
-                'keyword': keyword,
-                'current_position': current_pos,
-                'previous_position': previous_pos,
-                'change': change
-            })
-
-    # Сортируем и получаем наибольшие изменения
-    biggest_improvements = sorted(
-        [x for x in position_changes if x['change'] > 0],
-        key=lambda x: x['change'],
-        reverse=True
-    )[:10]
-
-    biggest_drops = sorted(
-        [x for x in position_changes if x['change'] < 0],
-        key=lambda x: abs(x['change']),
-        reverse=True
-    )[:10]
-
-    # Вычисляем средние позиции для каждой даты
-    avg_positions = []
-    for date in check_dates:
-        positions_list = [
-            dates[date]['position']
-            for dates in positions_data.values()
-            if dates[date]['position'] is not None
-        ]
-        if positions_list:
-            avg = round(sum(positions_list) / len(positions_list), 1)
-            avg_positions.append(avg)
+    # Сортируем улучшения и падения
+    biggest_improvements = sorted(biggest_improvements, key=lambda x: x['change'], reverse=True)[:5]
+    biggest_drops = sorted(biggest_drops, key=lambda x: x['change'], reverse=True)[:5]
 
     return render_template('main/positions_report.html',
                          project=project,
@@ -625,6 +588,7 @@ def refresh_project_data(project_id):
         
         for keyword, keyword_obj in keywords_list:
             try:
+                # Проверяем, существует ли уже такое ключевое слово
                 if keyword in positions:
                     pos_data = positions[keyword]
                     position = KeywordPosition(
@@ -823,6 +787,7 @@ def export_positions(project_id):
     position_filter = request.args.get('position', '')
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
+    url_filter = request.args.get('url_filter')
 
     # Base query
     query = (KeywordPosition.query
@@ -1006,7 +971,7 @@ def traffic_report(project_id):
         query = query.filter(URL.url.like(url_filter))
 
     # Получаем все записи о трафике
-    traffic_records = query.order_by(URLTraffic.check_date.desc()).all()
+    traffic_records = query.order_by(URLTraffic.check_date.asc()).all()
 
     # Группируем данные по URL и датам
     traffic_data = {}
@@ -1020,8 +985,8 @@ def traffic_report(project_id):
             traffic_data[url] = {}
         traffic_data[url][date] = record.visits
 
-    # Сортируем даты от новых к старым
-    dates = sorted(list(dates), reverse=True)
+    # Сортируем даты от старых к новым
+    dates = sorted(list(dates))
 
     # Подготавливаем данные для шаблона
     formatted_data = []
@@ -1029,27 +994,41 @@ def traffic_report(project_id):
     # Вычисляем средние значения для каждой даты
     averages = []
     for date in dates:
-        date_values = [data[date] for data in traffic_data.values() if date in data]
-        if date_values:
-            avg = round(sum(date_values) / len(date_values))
-            averages.append(avg)
-        else:
+        date_values = []
+        for url_data in traffic_data.values():
+            if date in url_data:
+                try:
+                    value = int(url_data[date])
+                    date_values.append(value)
+                except (ValueError, TypeError):
+                    continue
+        
+        try:
+            if date_values:
+                avg = sum(date_values) / len(date_values)
+                averages.append(int(round(avg)))
+            else:
+                averages.append(0)
+        except (ZeroDivisionError, TypeError):
             averages.append(0)
 
     # Подготавливаем данные об изменениях трафика
     changes_data = []
     for url, data in traffic_data.items():
-        sorted_dates = sorted(data.keys(), reverse=True)
+        sorted_dates = sorted(data.keys())  # сортируем от старых к новым
         if len(sorted_dates) >= 2:
-            current_traffic = data[sorted_dates[0]]
-            previous_traffic = data[sorted_dates[1]]
-            change = current_traffic - previous_traffic
-            changes_data.append({
-                'url': url,
-                'current_traffic': current_traffic,
-                'previous_traffic': previous_traffic,
-                'change': change
-            })
+            try:
+                current_traffic = int(data[sorted_dates[-1]])  # берем самую новую дату
+                previous_traffic = int(data[sorted_dates[-2]])  # берем предыдущую дату
+                change = current_traffic - previous_traffic
+                changes_data.append({
+                    'url': url,
+                    'current_traffic': current_traffic,
+                    'previous_traffic': previous_traffic,
+                    'change': change
+                })
+            except (ValueError, TypeError):
+                continue
 
     # Сортируем изменения по убыванию и возрастанию для топов
     biggest_increases = sorted(changes_data, key=lambda x: x['change'], reverse=True)[:5]
@@ -1059,23 +1038,30 @@ def traffic_report(project_id):
     for url, data in traffic_data.items():
         url_traffic = []
         
-        for i, date in enumerate(dates):
-            value = data.get(date, 0)
-            change = 0
-            change_value = ''
-            
-            # Сравниваем с предыдущей датой
-            if i < len(dates) - 1:
-                prev_value = data.get(dates[i + 1], 0)
-                change = value - prev_value
-                if change != 0:
-                    change_value = f"{abs(change)}"
-            
-            url_traffic.append({
-                'value': value,
-                'change': change,
-                'change_value': change_value
-            })
+        for date in dates:
+            try:
+                value = int(data.get(date, 0))
+                change = 0
+                change_value = ''
+                
+                # Для последней даты вычисляем изменение
+                if date == dates[-1] and len(dates) > 1:
+                    prev_value = int(data.get(dates[-2], 0))
+                    change = value - prev_value
+                    if change != 0:
+                        change_value = f"{abs(change)}"
+                
+                url_traffic.append({
+                    'value': value,
+                    'change': change,
+                    'change_value': change_value
+                })
+            except (ValueError, TypeError):
+                url_traffic.append({
+                    'value': 0,
+                    'change': 0,
+                    'change_value': ''
+                })
             
         if min_traffic is None or max(data.values(), default=0) >= min_traffic:
             formatted_data.append({
@@ -1097,34 +1083,33 @@ def traffic_report(project_id):
 @bp.route('/project/<int:project_id>/traffic/export')
 @login_required
 def export_traffic(project_id):
-    # Получаем те же данные, что и для отчета
     project = Project.query.get_or_404(project_id)
     if project.user_id != current_user.id:
         flash('У вас нет доступа к этому проекту', 'error')
         return redirect(url_for('main.dashboard'))
 
-    # Получаем параметры фильтров
-    date_from = request.args.get('date_from')
-    date_to = request.args.get('date_to')
-    min_traffic = request.args.get('min_traffic', type=int)
-    url_filter = request.args.get('url_filter')
-
-    # Базовый запрос
+    # Получаем данные аналогично отчету
     query = (URLTraffic.query
              .join(URL)
-             .filter(URL.project_id == project_id))
+             .filter(URL.project_id == project_id)
+             .order_by(URLTraffic.check_date.asc()))
+    
+    traffic_records = query.all()
 
-    # Применяем фильтры
-    if date_from:
-        query = query.filter(URLTraffic.check_date >= datetime.strptime(date_from, '%Y-%m-%d'))
-    if date_to:
-        query = query.filter(URLTraffic.check_date <= datetime.strptime(date_to, '%Y-%m-%d'))
-    if url_filter:
-        url_filter = url_filter.replace('*', '%')
-        query = query.filter(URL.url.like(url_filter))
+    # Группируем данные
+    traffic_data = {}
+    dates = set()
+    for record in traffic_records:
+        url = record.url.url
+        date = record.check_date.strftime('%Y-%m-%d')
+        dates.add(date)
+        
+        if url not in traffic_data:
+            traffic_data[url] = {}
+        traffic_data[url][date] = record.visits
 
-    # Получаем все записи о трафике
-    traffic_records = query.order_by(URLTraffic.check_date.desc()).all()
+    # Сортируем даты
+    dates = sorted(list(dates))
 
     # Создаем Excel файл
     output = io.BytesIO()
@@ -1134,34 +1119,45 @@ def export_traffic(project_id):
     # Форматирование
     header_format = workbook.add_format({
         'bold': True,
-        'bg_color': '#F3F4F6',
-        'border': 1
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': '#F3F4F6'
+    })
+    
+    url_format = workbook.add_format({
+        'text_wrap': True,
+        'valign': 'vcenter'
     })
 
     # Записываем заголовки
     worksheet.write(0, 0, 'URL', header_format)
-    worksheet.write(0, 1, 'Дата проверки', header_format)
-    worksheet.write(0, 2, 'Трафик', header_format)
-    worksheet.write(0, 3, 'Изменение', header_format)
+    for i, date in enumerate(dates):
+        worksheet.write(0, i + 1, date, header_format)
 
-    # Записываем данные
-    row = 1
-    for record in traffic_records:
-        worksheet.write(row, 0, record.url.url)
-        worksheet.write(row, 1, record.check_date.strftime('%Y-%m-%d'))
-        worksheet.write(row, 2, record.visits)
-        
-        # Находим предыдущую запись для этого URL
-        prev_record = URLTraffic.query.join(URL).filter(
-            URL.id == record.url.id,
-            URLTraffic.check_date < record.check_date
-        ).order_by(URLTraffic.check_date.desc()).first()
-        
-        if prev_record:
-            change = record.visits - prev_record.visits
-            worksheet.write(row, 3, change)
-        
+    # Записываем средние значения
+    worksheet.write(1, 0, 'Среднее', header_format)
+    for i, date in enumerate(dates):
+        date_values = []
+        for data in traffic_data.values():
+            if date in data:
+                date_values.append(data[date])
+        if date_values:
+            avg = int(round(sum(date_values) / len(date_values)))
+            worksheet.write(1, i + 1, avg)
+        else:
+            worksheet.write(1, i + 1, 0)
+
+    # Записываем данные по URL
+    row = 2
+    for url, data in sorted(traffic_data.items(), key=lambda x: max(x[1].values(), default=0), reverse=True):
+        worksheet.write(row, 0, url, url_format)
+        for i, date in enumerate(dates):
+            worksheet.write(row, i + 1, data.get(date, 0))
         row += 1
+
+    # Устанавливаем ширину столбцов
+    worksheet.set_column(0, 0, 50)  # URL column
+    worksheet.set_column(1, len(dates), 15)  # Date columns
 
     workbook.close()
     output.seek(0)
@@ -1170,5 +1166,5 @@ def export_traffic(project_id):
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=f'traffic_report_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        download_name=f'traffic_report_{project.name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )

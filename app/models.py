@@ -58,7 +58,9 @@ class Keyword(db.Model):
     keyword = db.Column(db.String(256))
     project_id = db.Column(db.Integer, db.ForeignKey('project.id', ondelete='CASCADE'))
     region_id = db.Column(db.Integer, db.ForeignKey('region.id'))
+    url_id = db.Column(db.Integer, db.ForeignKey('url.id', ondelete='CASCADE'))  # Добавляем связь с URL
     positions = db.relationship('KeywordPosition', backref='keyword', lazy='dynamic', cascade='all, delete-orphan')
+    url = db.relationship('URL', backref=db.backref('keyword_list', lazy='dynamic'))  # Исправляем backref
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_webmaster_update = db.Column(db.DateTime)
     
@@ -83,7 +85,7 @@ class URL(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_metrika_update = db.Column(db.DateTime)
     traffic_data = db.relationship('URLTraffic', backref='url', lazy='dynamic', cascade='all, delete-orphan')
-
+    
 class URLTraffic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url_id = db.Column(db.Integer, db.ForeignKey('url.id', ondelete='CASCADE'))
