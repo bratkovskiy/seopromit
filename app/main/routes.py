@@ -88,210 +88,176 @@ def project(id):
         
     return render_template('main/project.html', project=project)
 
-@bp.route('/project/<int:id>/keywords', methods=['GET', 'POST'])
+@bp.route('/project/<int:project_id>/keywords')
 @login_required
-def project_keywords(id):
-    project = Project.query.get_or_404(id)
+def project_keywords(project_id):
+    project = Project.query.get_or_404(project_id)
     if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
+        flash('У вас нет доступа к этому проекту', 'error')
         return redirect(url_for('main.dashboard'))
-    
-    form = KeywordForm()
-    regions = Region.query.order_by(Region.name).all()
-    
-    if request.method == 'POST':
-        if form.validate_on_submit():
-            region_id = request.form.get('region_id')
-            if not region_id:
-                flash('Выберите регион', 'error')
-                return render_template('main/keywords.html', 
-                                    title='Ключевые слова',
-                                    project=project,
-                                    regions=regions,
-                                    form=form)
-            
-            keywords_text = form.keywords.data.strip()
-            if not keywords_text:
-                flash('Введите ключевые слова', 'error')
-                return render_template('main/keywords.html', 
-                                    title='Ключевые слова',
-                                    project=project,
-                                    regions=regions,
-                                    form=form)
-            
-            # Разбиваем текст на отдельные ключевые слова
-            keywords_list = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
-            added_count = 0
-            exists_count = 0
-            error_count = 0
-            
-            for keyword_text in keywords_list:
-                # Проверяем, не существует ли уже такое ключевое слово для данного проекта и региона
-                existing_keyword = Keyword.query.filter_by(
-                    project_id=id,
-                    keyword=keyword_text,
-                    region_id=region_id
-                ).first()
-                
-                if existing_keyword:
-                    exists_count += 1
-                    continue
-                
-                try:
-                    keyword = Keyword(
-                        keyword=keyword_text,
-                        project_id=id,
-                        region_id=region_id
-                    )
+
+    return render_template('main/keywords.html', project=project)
+
+@bp.route('/project/<int:project_id>/keywords/add', methods=['POST'])
+@login_required
+def add_keyword(project_id):
+    try:
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            flash('У вас нет доступа к этому проекту', 'error')
+            return redirect(url_for('main.dashboard'))
+
+        keywords_text = request.form.get('keywords', '').strip()
+        if not keywords_text:
+            flash('Введите хотя бы одно ключевое слово', 'error')
+            return redirect(url_for('main.project_keywords', project_id=project_id))
+
+        # Разбиваем текст на отдельные ключевые слова
+        keywords = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
+        
+        # Добавляем каждое ключевое слово
+        for keyword_text in keywords:
+            try:
+                # Проверяем, существует ли уже такое ключевое слово
+                if not Keyword.query.filter_by(project_id=project_id, keyword=keyword_text).first():
+                    keyword = Keyword(project_id=project_id, keyword=keyword_text)
                     db.session.add(keyword)
-                    db.session.commit()
-                    added_count += 1
-                except Exception as e:
-                    db.session.rollback()
-                    error_count += 1
-                    current_app.logger.error(f"Error adding keyword '{keyword_text}' to project {id}: {str(e)}")
-            
-            if added_count > 0:
-                flash(f'Добавлено {added_count} ключевых слов', 'success')
-            if exists_count > 0:
-                flash(f'{exists_count} ключевых слов уже существуют', 'warning')
-            if error_count > 0:
-                flash(f'Не удалось добавить {error_count} ключевых слов', 'error')
-        else:
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
-    
-    return render_template('main/keywords.html', 
-                         title='Ключевые слова',
-                         project=project,
-                         regions=regions,
-                         form=form)
 
-@bp.route('/project/<int:id>/keywords/table')
-@login_required
-def get_keywords_table(id):
-    project = Project.query.get_or_404(id)
-    if project.user_id != current_user.id:
-        return jsonify({'error': 'Access denied'}), 403
-    
-    # Получаем ключевые слова проекта
-    keywords = project.keywords.order_by(Keyword.keyword.asc()).all()
-    
-    # Рендерим только таблицу с ключевыми словами
-    return render_template('main/_keywords_table.html', 
-                         project=project, 
-                         keywords=keywords)
+            except Exception as e:
+                flash(f'Ошибка при добавлении ключевого слова {keyword_text}: {str(e)}', 'error')
+                continue
 
-@bp.route('/project/<int:id>/urls')
+        db.session.commit()
+        flash('Ключевые слова успешно добавлены', 'success')
+        return redirect(url_for('main.project_keywords', project_id=project_id))
+
+    except Exception as e:
+        flash(f'Произошла ошибка: {str(e)}', 'error')
+        return redirect(url_for('main.project_keywords', project_id=project_id))
+
+@bp.route('/project/<int:project_id>/keywords/<int:keyword_id>/delete', methods=['POST'])
 @login_required
-def project_urls(id):
-    project = Project.query.get_or_404(id)
-    if project.user_id != current_user.id:
-        flash('Access denied.', 'error')
+def delete_keyword(project_id, keyword_id):
+    keyword = Keyword.query.get_or_404(keyword_id)
+    if keyword.project.user_id != current_user.id:
+        flash('У вас нет доступа к этому ключевому слову', 'error')
         return redirect(url_for('main.dashboard'))
-    form = URLForm()
-    return render_template('main/urls.html', title='URLs', project=project, urls=project.urls, form=form)
+
+    try:
+        db.session.delete(keyword)
+        db.session.commit()
+        flash('Ключевое слово успешно удалено', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении ключевого слова: {str(e)}', 'error')
+
+    return redirect(url_for('main.project_keywords', project_id=project_id))
+
+@bp.route('/project/<int:project_id>/keywords/clear', methods=['POST'])
+@login_required
+def clear_all_keywords(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        Keyword.query.filter_by(project_id=project_id).delete()
+        db.session.commit()
+        flash('Все ключевые слова успешно удалены', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении ключевых слов: {str(e)}', 'error')
+
+    return redirect(url_for('main.project_keywords', project_id=project_id))
+
+@bp.route('/project/<int:project_id>/urls')
+@login_required
+def project_urls(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    return render_template('main/urls.html', project=project)
 
 @bp.route('/project/<int:project_id>/urls/add', methods=['POST'])
 @login_required
 def add_urls(project_id):
-    form = URLForm()
-    if form.validate_on_submit():
+    try:
         project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
+            flash('У вас нет доступа к этому проекту', 'error')
             return redirect(url_for('main.dashboard'))
-        
-        urls_text = form.urls.data.strip()
-        if not urls_text:
-            flash('Введите URLs', 'error')
-            return redirect(url_for('main.project_urls', id=project_id))
-        
-        # Разбиваем текст на отдельные URLs
-        urls_list = [url.strip() for url in urls_text.split('\n') if url.strip()]
-        added_count = 0
-        exists_count = 0
-        error_count = 0
-        
-        for url_text in urls_list:
-            # Проверяем, не существует ли уже такой URL
-            existing_url = URL.query.filter_by(
-                project_id=project_id,
-                url=url_text
-            ).first()
-            
-            if existing_url:
-                exists_count += 1
-                continue
-            
-            try:
-                url = URL(url=url_text, project_id=project_id)
-                db.session.add(url)
-                db.session.commit()
-                added_count += 1
-            except Exception as e:
-                db.session.rollback()
-                error_count += 1
-                current_app.logger.error(f"Error adding URL '{url_text}' to project {project_id}: {str(e)}")
-        
-        if added_count > 0:
-            flash(f'Добавлено {added_count} URLs', 'success')
-        if exists_count > 0:
-            flash(f'{exists_count} URLs уже существуют', 'warning')
-        if error_count > 0:
-            flash(f'Не удалось добавить {error_count} URLs', 'error')
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
-    
-    return redirect(url_for('main.project_urls', id=project_id))
 
-@bp.route('/project/<int:project_id>/url/<int:url_id>/delete', methods=['POST'])
+        urls_text = request.form.get('urls', '').strip()
+        if not urls_text:
+            flash('Введите хотя бы один URL', 'error')
+            return redirect(url_for('main.project_urls', project_id=project_id))
+
+        # Разбиваем текст на отдельные URL
+        urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
+        
+        # Проверяем каждый URL
+        for url_str in urls:
+            try:
+                # Проверяем, что URL начинается с http:// или https://
+                if not url_str.startswith(('http://', 'https://')):
+                    url_str = 'https://' + url_str
+
+                # Проверяем, что URL валидный
+                result = urlparse(url_str)
+                if not all([result.scheme, result.netloc]):
+                    raise ValueError(f'Неверный формат URL: {url_str}')
+
+                # Проверяем, существует ли уже такой URL
+                if not URL.query.filter_by(project_id=project_id, url=url_str).first():
+                    url = URL(project_id=project_id, url=url_str)
+                    db.session.add(url)
+
+            except Exception as e:
+                flash(f'Ошибка при добавлении URL {url_str}: {str(e)}', 'error')
+                continue
+
+        db.session.commit()
+        flash('URL успешно добавлены', 'success')
+        return redirect(url_for('main.project_urls', project_id=project_id))
+
+    except Exception as e:
+        flash(f'Произошла ошибка: {str(e)}', 'error')
+        return redirect(url_for('main.project_urls', project_id=project_id))
+
+@bp.route('/project/<int:project_id>/urls/<int:url_id>/delete', methods=['POST'])
 @login_required
 def delete_url(project_id, url_id):
-    form = URLForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        url = URL.query.get_or_404(url_id)
-        if url.project_id != project_id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        try:
-            db.session.delete(url)
-            db.session.commit()
-            flash('URL успешно удален.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при удалении URL: {str(e)}', 'error')
-    
-    return redirect(url_for('main.project_urls', id=project_id))
+    url = URL.query.get_or_404(url_id)
+    if url.project.user_id != current_user.id:
+        flash('У вас нет доступа к этому URL', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        db.session.delete(url)
+        db.session.commit()
+        flash('URL успешно удален', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении URL: {str(e)}', 'error')
+
+    return redirect(url_for('main.project_urls', project_id=project_id))
 
 @bp.route('/project/<int:project_id>/urls/clear', methods=['POST'])
 @login_required
 def clear_all_urls(project_id):
-    form = URLForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        try:
-            URL.query.filter_by(project_id=project_id).delete()
-            db.session.commit()
-            flash('Все URLs успешно удалены.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при удалении URLs: {str(e)}', 'error')
-    
-    return redirect(url_for('main.project_urls', id=project_id))
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        URL.query.filter_by(project_id=project_id).delete()
+        db.session.commit()
+        flash('Все URL успешно удалены', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении URL: {str(e)}', 'error')
+
+    return redirect(url_for('main.project_urls', project_id=project_id))
 
 @bp.route('/project/<int:id>/delete', methods=['POST'])
 @login_required
@@ -373,95 +339,6 @@ def validate_webmaster():
     print(f"Отправляем ответ: {response}")
     return jsonify(response)
 
-@bp.route('/project/<int:project_id>/keywords/add', methods=['POST'])
-@login_required
-def add_keyword(project_id):
-    form = KeywordForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        region_id = request.form.get('region_id')
-        if not region_id:
-            flash('Выберите регион', 'error')
-            return redirect(url_for('main.project_keywords', id=project_id))
-        
-        keyword_text = form.keywords.data
-        
-        # Проверяем, не существует ли уже такое ключевое слово для данного проекта
-        existing_keyword = Keyword.query.filter_by(
-            project_id=project_id,
-            keyword=keyword_text,
-            region_id=region_id
-        ).first()
-        
-        if existing_keyword:
-            flash('Такое ключевое слово уже существует для выбранного региона', 'error')
-        else:
-            keyword = Keyword(
-                keyword=keyword_text,
-                project_id=project_id,
-                region_id=region_id
-            )
-            db.session.add(keyword)
-            db.session.commit()
-            flash('Ключевое слово добавлено', 'success')
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f'Ошибка в поле {getattr(form, field).label.text}: {error}', 'error')
-    
-    return redirect(url_for('main.project_keywords', id=project_id))
-
-@bp.route('/project/<int:project_id>/keyword/<int:keyword_id>/delete', methods=['POST'])
-@login_required
-def delete_keyword(project_id, keyword_id):
-    form = KeywordForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        keyword = Keyword.query.get_or_404(keyword_id)
-        if keyword.project_id != project_id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        try:
-            db.session.delete(keyword)
-            db.session.commit()
-            flash('Ключевое слово успешно удалено', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при удалении ключевого слова: {str(e)}', 'error')
-            current_app.logger.error(f"Error deleting keyword {keyword_id} from project {project_id}: {str(e)}")
-    
-    return redirect(url_for('main.project_keywords', id=project_id))
-
-@bp.route('/project/<int:project_id>/keywords/clear', methods=['POST'])
-@login_required
-def clear_all_keywords(project_id):
-    form = KeywordForm()
-    if form.validate_on_submit():
-        project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
-            flash('Access denied.', 'error')
-            return redirect(url_for('main.dashboard'))
-        
-        try:
-            Keyword.query.filter_by(project_id=project_id).delete()
-            db.session.commit()
-            flash('Все ключевые слова успешно удалены', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при удалении ключевых слов: {str(e)}', 'error')
-            current_app.logger.error(f"Error clearing all keywords for project {project_id}: {str(e)}")
-    
-    return redirect(url_for('main.project_keywords', id=project_id))
-
 @bp.route('/project/<int:project_id>/get_data', methods=['POST'])
 @login_required
 def get_project_data(project_id):
@@ -496,12 +373,10 @@ def project_positions_report(project_id):
         flash('У вас нет доступа к этому проекту', 'error')
         return redirect(url_for('main.dashboard'))
 
-    # Get all positions with related data
+    # Получаем все позиции с сортировкой по дате (от новых к старым)
     positions = db.session.query(
         KeywordPosition.position,
         KeywordPosition.check_date,
-        KeywordPosition.data_date_start,
-        KeywordPosition.data_date_end,
         Keyword.keyword
     ).join(
         Keyword, KeywordPosition.keyword_id == Keyword.id
@@ -511,31 +386,27 @@ def project_positions_report(project_id):
         KeywordPosition.check_date.desc()
     ).all()
 
-    # Get unique keywords
+    # Получаем уникальные ключевые слова
     keywords = sorted(list({pos.keyword for pos in positions}))
 
-    # Get all check dates without limit
+    # Получаем даты проверок и сортируем их от новых к старым
     check_dates = sorted(list({pos.check_date.strftime('%Y-%m-%d') for pos in positions}), reverse=True)
 
-    # Prepare data for template
+    # Подготавливаем данные для шаблона
     positions_data = {}
     for keyword in keywords:
         positions_data[keyword] = {}
         for date in check_dates:
             positions_data[keyword][date] = {
-                'position': None,
-                'data_period': None
+                'position': None
             }
 
-    # Fill in the data
+    # Заполняем данные
     for pos in positions:
         check_date = pos.check_date.strftime('%Y-%m-%d')
-        positions_data[pos.keyword][check_date] = {
-            'position': pos.position,
-            'data_period': f"{pos.data_date_start.strftime('%Y-%m-%d')} - {pos.data_date_end.strftime('%Y-%m-%d')}"
-        }
+        positions_data[pos.keyword][check_date]['position'] = pos.position
 
-    # Calculate changes and statistics
+    # Вычисляем статистику изменений
     changes_data = {
         'total_keywords': len(keywords),
         'improved': 0,
@@ -557,9 +428,9 @@ def project_positions_report(project_id):
                            if positions_data[keyword][date]['position'] is not None]
         
         if len(keyword_positions) >= 2:
-            # Сортируем по дате (уже отсортировано в обратном порядке)
-            current_date, current_pos = keyword_positions[0]  # Самая новая дата
-            previous_date, previous_pos = keyword_positions[1]  # Предыдущая дата
+            # Даты уже отсортированы от новых к старым
+            current_date, current_pos = keyword_positions[0]
+            previous_date, previous_pos = keyword_positions[1]
             
             change = previous_pos - current_pos  # Положительное значение = улучшение
 
@@ -602,7 +473,7 @@ def project_positions_report(project_id):
         reverse=True
     )[:10]
 
-    # Calculate average positions for chart
+    # Вычисляем средние позиции для каждой даты
     avg_positions = []
     for date in check_dates:
         positions_list = [
@@ -612,15 +483,7 @@ def project_positions_report(project_id):
         ]
         if positions_list:
             avg = round(sum(positions_list) / len(positions_list), 1)
-            avg_positions.append({
-                'x': date,
-                'y': avg
-            })
-    
-    print("Debug - avg_positions:", avg_positions)  # Отладочный вывод
-
-    # Get all check dates without limit
-    check_dates = sorted(list({pos.check_date.strftime('%Y-%m-%d') for pos in positions}), reverse=True)
+            avg_positions.append(avg)
 
     return render_template('main/positions_report.html',
                          project=project,
@@ -737,90 +600,87 @@ def update_project_data(project_id):
         flash('Произошла ошибка при обновлении данных', 'error')
         return redirect(url_for('main.project', id=project_id))
 
-@bp.route('/project/<int:id>/refresh', methods=['GET'])
+@bp.route('/project/<int:project_id>/refresh', methods=['GET'])
 @login_required
-def refresh_project_data(id):
+def refresh_project_data(project_id):
     try:
-        project = Project.query.get_or_404(id)
+        project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
             flash('У вас нет доступа к этому проекту', 'error')
             return redirect(url_for('main.dashboard'))
 
+        # Проверяем токены
+        if not project.yandex_metrika_token or not project.yandex_webmaster_token:
+            flash('Необходимо добавить токены Яндекс.Метрики и Яндекс.Вебмастера', 'error')
+            return redirect(url_for('main.project', project_id=project_id))
+
         # Создаем API клиенты
-        webmaster_api = YandexWebmasterAPI(
-            oauth_token=project.yandex_webmaster_token,
-            user_id=project.yandex_webmaster_user_id
-        )
+        webmaster_api = YandexWebmasterAPI(project.yandex_webmaster_token)
         metrika_api = YandexMetrikaAPI(project.yandex_metrika_token)
 
         # Обновляем данные по ключевым словам
-        current_app.logger.info(f"Updating keyword data for project {id}")
+        current_app.logger.info(f"Updating keyword data for project {project_id}")
         keywords_list = [(kw.keyword, kw) for kw in project.keywords]
         positions = webmaster_api.get_keywords_positions(project.yandex_webmaster_host, [kw for kw, _ in keywords_list])
         
-        for keyword_text, keyword in keywords_list:
+        for keyword, keyword_obj in keywords_list:
             try:
-                if keyword_text in positions:
-                    position, date = positions[keyword_text]
-                    keyword_position = KeywordPosition(
-                        keyword_id=keyword.id,
-                        position=position,
-                        date=date
+                if keyword in positions:
+                    pos_data = positions[keyword]
+                    position = KeywordPosition(
+                        keyword_id=keyword_obj.id,
+                        position=pos_data['position'],
+                        check_date=datetime.utcnow(),
+                        data_date_start=datetime.strptime(pos_data['date_from'], '%Y-%m-%d'),
+                        data_date_end=datetime.strptime(pos_data['date_to'], '%Y-%m-%d')
                     )
-                    db.session.add(keyword_position)
-                    keyword.last_webmaster_update = datetime.utcnow()
-                    current_app.logger.info(f"Updated position for keyword {keyword_text}: {position}")
-                else:
-                    current_app.logger.warning(f"No position data for keyword {keyword_text!r}")
+                    db.session.add(position)
             except Exception as e:
-                current_app.logger.error(f"Error updating keyword {keyword_text}: {str(e)}")
+                current_app.logger.error(f"Error processing keyword {keyword}: {str(e)}")
                 continue
 
         # Обновляем данные по URL
-        current_app.logger.info(f"Updating URL data for project {id}")
+        current_app.logger.info(f"Updating URL data for project {project_id}")
         for url in project.urls:
             try:
                 # Получаем трафик из Метрики за последние 7 дней
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=7)
-                
-                # Получаем путь из URL
-                path = urlparse(url.url).path
-                
-                traffic = metrika_api.get_pageviews(
+                traffic_data = metrika_api.get_url_traffic(
                     counter_id=project.yandex_metrika_counter,
-                    start_date=start_date.strftime('%Y-%m-%d'),
-                    end_date=end_date.strftime('%Y-%m-%d'),
-                    filters=f"ym:pv:URLPath=='{path}'"
+                    url=url.url,
+                    date_from=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'),
+                    date_to=datetime.now().strftime('%Y-%m-%d')
                 )
                 
-                if traffic is not None:
-                    url_traffic = URLTraffic(
+                if traffic_data:
+                    traffic = URLTraffic(
                         url_id=url.id,
-                        visits=traffic,
+                        visits=traffic_data['visits'],
                         check_date=datetime.utcnow()
                     )
-                    db.session.add(url_traffic)
-                    url.last_metrika_update = datetime.utcnow()
-                    current_app.logger.info(f"Updated traffic for URL {url.url}: {traffic}")
-                else:
-                    current_app.logger.warning(f"No traffic data for URL {url.url}")
-
+                    db.session.add(traffic)
+                
+                # Получаем данные по URL из Вебмастера
+                url_data = webmaster_api.get_url_data(project.yandex_webmaster_host, url.url)
+                if url_data:
+                    url.last_status = url_data.get('status', 'UNKNOWN')
+                    url.last_status_code = url_data.get('http_code')
+                    url.last_check = datetime.utcnow()
+            
             except Exception as e:
-                current_app.logger.error(f"Error updating URL {url.url}: {str(e)}")
+                current_app.logger.error(f"Error processing URL {url.url}: {str(e)}")
                 continue
 
         # Сохраняем все изменения
         db.session.commit()
-        current_app.logger.info(f"Successfully updated all data for project {id}")
+        current_app.logger.info(f"Successfully updated all data for project {project_id}")
         flash('Данные успешно обновлены', 'success')
         
-        return redirect(url_for('main.project', id=id))
+        return redirect(url_for('main.project', project_id=project_id))
 
     except Exception as e:
         current_app.logger.error(f"Error updating data: {str(e)}")
         flash('Произошла ошибка при обновлении данных', 'error')
-        return redirect(url_for('main.project', id=id))
+        return redirect(url_for('main.project', project_id=project_id))
 
 @bp.route('/project/<int:project_id>/refresh_positions', methods=['POST'])
 @login_required
@@ -1029,11 +889,11 @@ def test_chart():
     }
     return render_template('main/test_chart.html', title='Тестовый график', chart_data=data, zip=builtins.zip)
 
-@bp.route('/project/<int:id>/update_status')
+@bp.route('/project/<int:project_id>/update_status')
 @login_required
-def check_update_status(id):
+def check_update_status(project_id):
     try:
-        project = Project.query.get_or_404(id)
+        project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
             return jsonify({
                 'status': 'error',
@@ -1041,7 +901,7 @@ def check_update_status(id):
             })
         
         # Проверяем флаг в сессии
-        session_key = f'update_completed_{id}'
+        session_key = f'update_completed_{project_id}'
         if session.get(session_key):
             # Если флаг установлен, сбрасываем его и возвращаем статус not_running
             session.pop(session_key, None)
@@ -1057,7 +917,7 @@ def check_update_status(id):
                 with open(log_file, 'r', encoding='cp1251') as f:
                     last_lines = f.readlines()[-10:]  # Читаем последние 10 строк
                     for line in reversed(last_lines):
-                        if str(id) in line and 'ERROR' in line:
+                        if str(project_id) in line and 'ERROR' in line:
                             return jsonify({
                                 'status': 'error',
                                 'message': line.split('ERROR - ')[-1].strip()
@@ -1066,7 +926,7 @@ def check_update_status(id):
             current_app.logger.error(f"Ошибка при чтении лог-файла: {e}")
         
         # Проверяем, запущен ли процесс
-        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{id}.pid')
+        pid_file = os.path.join(current_app.root_path, '..', 'logs', f'update_positions_{project_id}.pid')
         process_running = False
         
         if os.path.exists(pid_file):
@@ -1092,7 +952,7 @@ def check_update_status(id):
         # Проверяем, было ли обновление успешным
         one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
         recent_update = KeywordPosition.query.join(Keyword).filter(
-            Keyword.project_id == id,
+            Keyword.project_id == project_id,
             KeywordPosition.check_date >= one_minute_ago
         ).first()
         
@@ -1160,61 +1020,79 @@ def traffic_report(project_id):
             traffic_data[url] = {}
         traffic_data[url][date] = record.visits
 
-    # Сортируем даты
-    dates = sorted(list(dates))
+    # Сортируем даты от новых к старым
+    dates = sorted(list(dates), reverse=True)
 
-    # Формируем данные для таблицы
-    table_data = []
-    for url in sorted(traffic_data.keys()):
+    # Подготавливаем данные для шаблона
+    formatted_data = []
+    
+    # Вычисляем средние значения для каждой даты
+    averages = []
+    for date in dates:
+        date_values = [data[date] for data in traffic_data.values() if date in data]
+        if date_values:
+            avg = round(sum(date_values) / len(date_values))
+            averages.append(avg)
+        else:
+            averages.append(0)
+
+    # Подготавливаем данные об изменениях трафика
+    changes_data = []
+    for url, data in traffic_data.items():
+        sorted_dates = sorted(data.keys(), reverse=True)
+        if len(sorted_dates) >= 2:
+            current_traffic = data[sorted_dates[0]]
+            previous_traffic = data[sorted_dates[1]]
+            change = current_traffic - previous_traffic
+            changes_data.append({
+                'url': url,
+                'current_traffic': current_traffic,
+                'previous_traffic': previous_traffic,
+                'change': change
+            })
+
+    # Сортируем изменения по убыванию и возрастанию для топов
+    biggest_increases = sorted(changes_data, key=lambda x: x['change'], reverse=True)[:5]
+    biggest_drops = sorted(changes_data, key=lambda x: x['change'])[:5]
+
+    # Форматируем данные по URL
+    for url, data in traffic_data.items():
         url_traffic = []
-        prev_value = None
         
-        for date in dates:
-            value = traffic_data[url].get(date)
+        for i, date in enumerate(dates):
+            value = data.get(date, 0)
             change = 0
             change_value = ''
             
-            if value is not None and prev_value is not None:
+            # Сравниваем с предыдущей датой
+            if i < len(dates) - 1:
+                prev_value = data.get(dates[i + 1], 0)
                 change = value - prev_value
-                change_value = f"{'+' if change > 0 else ''}{change}"
+                if change != 0:
+                    change_value = f"{abs(change)}"
             
             url_traffic.append({
-                'value': value if value is not None else '-',
+                'value': value,
                 'change': change,
                 'change_value': change_value
             })
             
-            if value is not None:
-                prev_value = value
-        
-        # Применяем фильтр по минимальному трафику
-        if min_traffic is None or any(t['value'] != '-' and t['value'] >= min_traffic for t in url_traffic):
-            table_data.append({
+        if min_traffic is None or max(data.values(), default=0) >= min_traffic:
+            formatted_data.append({
                 'url': url,
                 'traffic': url_traffic
             })
 
-    # Вычисляем средние значения
-    averages = []
-    for i in range(len(dates)):
-        values = [data['traffic'][i]['value'] for data in table_data 
-                 if data['traffic'][i]['value'] != '-']
-        avg = sum(values) / len(values) if values else 0
-        averages.append(round(avg, 1))
-
-    # Данные для графика
-    chart_data = {
-        'labels': dates,
-        'values': averages
-    }
+    # Сортируем URL по убыванию максимального трафика
+    formatted_data.sort(key=lambda x: max((item['value'] for item in x['traffic']), default=0), reverse=True)
 
     return render_template('main/traffic_report.html',
-                         title='Отчет по трафику',
                          project=project,
+                         traffic_data=formatted_data,
                          dates=dates,
-                         traffic_data=table_data,
                          averages=averages,
-                         chart_data=chart_data)
+                         biggest_increases=biggest_increases,
+                         biggest_drops=biggest_drops)
 
 @bp.route('/project/<int:project_id>/traffic/export')
 @login_required

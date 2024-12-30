@@ -79,28 +79,49 @@
                             </dd>
                         </div>
                     </dl>
-                    <div class="mt-4 flex justify-end space-x-3">
-                        <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}"
-                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
-                            <span>Отчет по позициям</span>
-                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                            </svg>
-                        </a>
-                        <a href="{{ url_for('main.project_keywords', id=project.id) }}"
-                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                            Управление
-                        </a>
-                        <button id="refresh-positions-btn"
-                                onclick="refreshPositions({{ project.id }})"
-                                class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                            Обновить позиции
-                        </button>
+                    <div class="mt-8 flex flex-col">
+                        <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                            <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                                <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                                    <div class="bg-white px-4 py-5 sm:p-6">
+                                        <h3 class="text-lg font-medium leading-6 text-gray-900">Данные проекта</h3>
+                                        
+                                        <!-- Кнопки управления -->
+                                        <div class="mt-5 flex flex-wrap gap-4">
+                                            <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                                Отчет по позициям
+                                            </a>
+                                            
+                                            <a href="{{ url_for('main.project_keywords', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                                Ключевые слова
+                                            </a>
+                                            
+                                            <a href="{{ url_for('main.traffic_report', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                                Отчет по трафику
+                                            </a>
+                                            
+                                            <a href="{{ url_for('main.project_urls', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                                                URL проекта
+                                            </a>
+                                            
+                                            <a href="{{ url_for('main.refresh_project_data', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                                Обновить данные
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     {% else %}
                     <p class="text-sm text-gray-500">Ключевые слова пока не добавлены</p>
                     <div class="mt-4 flex justify-end">
-                        <a href="{{ url_for('main.project_keywords', id=project.id) }}"
+                        <a href="{{ url_for('main.project_keywords', project_id=project.id) }}"
                            class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                             Управление
                         </a>
@@ -146,27 +167,40 @@
                             </dd>
                         </div>
                     </dl>
-                    <div class="mt-4 flex justify-end space-x-3">
-                        <a href="{{ url_for('main.traffic_report', project_id=project.id) }}"
-                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
-                            <span>Отчет по трафику</span>
-                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                            </svg>
-                        </a>
-                        <a href="{{ url_for('main.project_urls', id=project.id) }}"
-                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                            Управление
-                        </a>
-                        <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
-                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                            Обновить данные
-                        </a>
+                    <div class="mt-8 flex flex-col">
+                        <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                            <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                                <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                                    <div class="bg-white px-4 py-5 sm:p-6">
+                                        <h3 class="text-lg font-medium leading-6 text-gray-900">Данные проекта</h3>
+                                        
+                                        <!-- Кнопки управления -->
+                                        <div class="mt-5 flex flex-wrap gap-4">
+                                            <a href="{{ url_for('main.traffic_report', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                                <span>Отчет по трафику</span>
+                                                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                                </svg>
+                                            </a>
+                                            <a href="{{ url_for('main.project_urls', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                                Управление
+                                            </a>
+                                            <a href="{{ url_for('main.refresh_project_data', project_id=project.id) }}"
+                                               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                                Обновить данные
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     {% else %}
                     <p class="text-sm text-gray-500">URLs пока не добавлены</p>
                     <div class="mt-4 flex justify-end">
-                        <a href="{{ url_for('main.project_urls', id=project.id) }}"
+                        <a href="{{ url_for('main.project_urls', project_id=project.id) }}"
                            class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                             Управление
                         </a>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">Отчет по трафику</h1>
+        <h1 class="text-2xl font-bold text-gray-800">Отчет по трафику проекта "{{ project.name }}"</h1>
         <div class="flex space-x-4">
             <button id="refreshDataBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
                 <span>Обновить данные</span>
@@ -50,47 +50,114 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     <!-- Строка со средними значениями -->
-                    <tr class="bg-blue-50 font-semibold border-b-2 border-blue-200">
-                        <td class="px-6 py-4 text-sm font-medium text-blue-900">
-                            Среднее
-                        </td>
-                        {% for avg in averages %}
-                        <td class="px-6 py-4 text-sm font-medium text-blue-900">
-                            {{ avg }}
+                    <tr class="bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Среднее</td>
+                        {% for i in range(dates|length) %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ averages[i] }}
+                            {% if i == 0 %}  {# Только для самой свежей даты #}
+                                {% set change = averages[0] - averages[1] %}
+                                {% if change != 0 %}
+                                    <span class="ml-1 {{ 'text-green-600' if change > 0 else 'text-red-600' }}">
+                                        {% if change > 0 %}↑{% else %}↓{% endif %}{{ change|abs }}
+                                    </span>
+                                {% endif %}
+                            {% endif %}
                         </td>
                         {% endfor %}
                     </tr>
+                    
                     <!-- Данные по URL -->
                     {% for url_data in traffic_data %}
                     <tr>
-                        <td class="px-6 py-4 text-sm text-gray-900">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             <div class="break-words">{{ url_data.url }}</div>
                         </td>
                         {% for traffic in url_data.traffic %}
-                        <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                            <div class="flex items-center">
-                                <span>{{ traffic.value }}</span>
-                                {% if loop.last and traffic.change != 0 %}
-                                <span class="ml-2 flex items-center {{ 'text-green-600' if traffic.change > 0 else 'text-red-600' }}">
-                                    {% if traffic.change > 0 %}
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                                    </svg>
-                                    {% else %}
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                    </svg>
-                                    {% endif %}
-                                    <span class="ml-1">{{ traffic.change_value }}</span>
-                                </span>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ traffic.value }}
+                            {% if loop.first %}  {# Только для самой свежей даты #}
+                                {% if traffic.change != 0 and traffic.change_value %}
+                                    <span class="ml-1 {{ 'text-green-600' if traffic.change > 0 else 'text-red-600' }}">
+                                        {% if traffic.change > 0 %}↑{% else %}↓{% endif %}{{ traffic.change_value }}
+                                    </span>
                                 {% endif %}
-                            </div>
+                            {% endif %}
                         </td>
                         {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Блоки с максимальным ростом и падением -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 px-4 py-5 sm:p-6">
+        <!-- URLs с максимальным ростом -->
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+            <div class="px-4 py-5 sm:px-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                    URLs с максимальным ростом трафика - {{ project.name }}
+                </h3>
+            </div>
+            <div class="border-t border-gray-200">
+                <div class="px-4 py-5 sm:p-6">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Текущий трафик</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Предыдущий трафик</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Изменение</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for item in biggest_increases %}
+                            <tr>
+                                <td class="px-4 py-3 text-sm text-gray-900 truncate max-w-xs">{{ item.url }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ item.current_traffic }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ item.previous_traffic }}</td>
+                                <td class="px-4 py-3 text-sm text-green-600">↑{{ item.change }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- URLs с максимальным падением -->
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+            <div class="px-4 py-5 sm:px-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                    URLs с максимальным падением трафика - {{ project.name }}
+                </h3>
+            </div>
+            <div class="border-t border-gray-200">
+                <div class="px-4 py-5 sm:p-6">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Текущий трафик</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Предыдущий трафик</th>
+                                <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Изменение</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for item in biggest_drops %}
+                            <tr>
+                                <td class="px-4 py-3 text-sm text-gray-900 truncate max-w-xs">{{ item.url }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ item.current_traffic }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ item.previous_traffic }}</td>
+                                <td class="px-4 py-3 text-sm text-red-600">↓{{ item.change|abs }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
