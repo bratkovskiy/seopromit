@@ -392,22 +392,51 @@ def project_positions_report(project_id):
         if keyword not in positions_data:
             positions_data[keyword] = {}
             
+        # Определяем период проверки на основе даты
+        check_hour = record.check_date.strftime('%H:%M')
+        data_period = f"{check_hour}"
+            
         positions_data[keyword][date] = {
             'position': record.position,
-            'data_period': 'Яндекс'  # или другой источник данных
+            'data_period': data_period,
+            'change': None,  # Будет вычислено позже
+            'change_value': None  # Будет вычислено позже
         }
 
     # Сортируем даты
     check_dates = sorted(list(check_dates))
 
-    # Вычисляем средние позиции для графика
+    # Вычисляем изменения для каждого ключевого слова
+    for keyword in positions_data:
+        dates = sorted(positions_data[keyword].keys())
+        for i in range(1, len(dates)):
+            current_date = dates[i]
+            prev_date = dates[i-1]
+            current_pos = positions_data[keyword][current_date]['position']
+            prev_pos = positions_data[keyword][prev_date]['position']
+            
+            if current_pos > 0 and prev_pos > 0:
+                change = prev_pos - current_pos
+                positions_data[keyword][current_date]['change'] = change
+                positions_data[keyword][current_date]['change_value'] = abs(change)
+
+    # Вычисляем средние позиции для графика и статистики
     for date in check_dates:
-        positions = [data[date]['position'] 
-                    for data in positions_data.values() 
-                    if date in data and data[date]['position'] > 0]
+        positions = []
+        total_change = 0
+        for data in positions_data.values():
+            if date in data and data[date]['position'] > 0:
+                positions.append(data[date]['position'])
+                if data[date]['change'] is not None:
+                    total_change += data[date]['change']
+        
         if positions:
             avg = sum(positions) / len(positions)
-            avg_positions.append({'x': date, 'y': round(avg, 1)})
+            avg_positions.append({
+                'x': date,
+                'y': round(avg, 1),
+                'change': round(total_change / len(positions), 1) if positions else 0
+            })
 
     # Подготавливаем данные об изменениях
     changes_data = {

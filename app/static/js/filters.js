@@ -17,10 +17,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         rows.forEach(row => {
             if (row.style.display !== 'none') {
-                // Получаем последнюю позицию (самая новая дата)
+                // Получаем первую позицию (самая новая дата)
                 const cells = Array.from(row.querySelectorAll('td'));
-                const lastPositionCell = cells[cells.length - 1];
-                const position = parseFloat(lastPositionCell.textContent);
+                const firstPositionCell = cells[1]; // Первая ячейка после ключевого слова
+                const positionText = firstPositionCell.textContent.trim().split(' ')[0]; // Берем только число, без стрелочки
+                const position = parseFloat(positionText);
 
                 if (!isNaN(position)) {
                     if (position >= 1.0 && position < 2.0) distribution.top1++;
@@ -51,9 +52,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const keyword = row.querySelector('td:first-child').textContent.toLowerCase();
             const cells = Array.from(row.querySelectorAll('td'));
             
-            // Получаем значение последней позиции (самая новая дата)
-            const lastPositionCell = cells[cells.length - 1];
-            const position = parseFloat(lastPositionCell.textContent);
+            // Получаем значение первой позиции (самая новая дата)
+            const firstPositionCell = cells[1]; // Первая ячейка после ключевого слова
+            const positionText = firstPositionCell.textContent.trim().split(' ')[0]; // Берем только число, без стрелочки
+            const position = parseFloat(positionText);
             
             console.log(`Строка ${rowIndex}:`, {
                 keyword,
@@ -107,28 +109,19 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('applyFilters').addEventListener('click', function() {
         activeFilters.keyword = document.getElementById('keywordSearch').value;
         activeFilters.position = document.getElementById('positionFilter').value;
-
-        console.log('Применяем фильтры:', activeFilters);
         filterTable();
     });
 
     // Обработчик сброса фильтров
     document.getElementById('resetFilters').addEventListener('click', function() {
-        // Сброс активных фильтров
-        activeFilters = {
-            keyword: '',
-            position: ''
-        };
-
-        // Сброс полей ввода
         document.getElementById('keywordSearch').value = '';
         document.getElementById('positionFilter').value = '';
-
-        console.log('Сброс фильтров');
+        activeFilters.keyword = '';
+        activeFilters.position = '';
         filterTable();
     });
 
-    // Инициализация распределения при загрузке
+    // Инициализация распределения при загрузке страницы
     updatePositionDistribution();
 
     // Обработчик обновления данных

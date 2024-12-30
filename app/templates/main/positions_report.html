@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">Отчет по позициям</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Отчет по позициям</h1>
         <div class="flex space-x-4">
             <button id="refreshBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
                 <span>Обновить данные</span>
@@ -59,72 +59,154 @@
         </div>
     </div>
 
-    {% if project.keywords.count() > 0 %}
-        <!-- Статистика -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <!-- Динамика изменений -->
-            <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
-                <h2 class="text-xl font-semibold mb-4">Динамика изменений</h2>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Всего ключевых слов:</span>
-                        <span class="font-semibold">{{ changes_data.total_keywords }}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Улучшили позиции:</span>
-                        <span class="text-green-600 font-semibold">{{ changes_data.improved }}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Ухудшили позиции:</span>
-                        <span class="text-red-600 font-semibold">{{ changes_data.worsened }}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Без изменений:</span>
-                        <span class="text-gray-600 font-semibold">{{ changes_data.unchanged }}</span>
-                    </div>
+    <!-- Статистика -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Динамика изменений -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Динамика изменений</h2>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Всего ключевых слов:</span>
+                    <span class="font-semibold">{{ changes_data.total_keywords }}</span>
                 </div>
-            </div>
-
-            <!-- Распределение по позициям -->
-            <div class="bg-white shadow-md rounded px-6 pt-4 pb-4">
-                <h2 class="text-lg font-semibold mb-4">Распределение по позициям</h2>
-                <div class="space-y-2">
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">ТОП1:</span>
-                        <span class="font-medium" data-distribution="top1">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">ТОП3:</span>
-                        <span class="font-medium" data-distribution="top3">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">ТОП5:</span>
-                        <span class="font-medium" data-distribution="top5">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">ТОП10:</span>
-                        <span class="font-medium" data-distribution="top10">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">ТОП100+:</span>
-                        <span class="font-medium" data-distribution="top100plus">0</span>
-                    </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Улучшили позиции:</span>
+                    <span class="text-green-600 font-semibold">{{ changes_data.improved }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Ухудшили позиции:</span>
+                    <span class="text-red-600 font-semibold">{{ changes_data.worsened }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Без изменений:</span>
+                    <span class="text-gray-600 font-semibold">{{ changes_data.unchanged }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- Основная таблица позиций -->
-        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Позиции ключевых слов</h2>
-            
-            <!-- График изменения позиций -->
-            <div class="bg-white p-4 rounded-lg shadow mb-6">
-                <h3 class="text-lg font-semibold mb-4">График средних позиций</h3>
-                <div id="chart-container" style="width: 100%; height: 400px;">
-                    <div id="tooltip" class="absolute hidden bg-gray-800 text-white p-2 rounded shadow-lg text-sm"></div>
+        <!-- Распределение по позициям -->
+        <div class="bg-white shadow-md rounded px-6 pt-4 pb-4">
+            <h2 class="text-lg font-semibold mb-4">Распределение по позициям</h2>
+            <div class="space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП1:</span>
+                    <span class="font-medium" data-distribution="top1">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП3:</span>
+                    <span class="font-medium" data-distribution="top3">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП5:</span>
+                    <span class="font-medium" data-distribution="top5">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП10:</span>
+                    <span class="font-medium" data-distribution="top10">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ТОП100+:</span>
+                    <span class="font-medium" data-distribution="top100plus">0</span>
                 </div>
             </div>
+        </div>
+    </div>
 
+    <!-- Основная таблица позиций -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Позиции ключевых слов</h2>
+        
+        <!-- График изменения позиций -->
+        <div class="bg-white p-4 rounded-lg shadow mb-6">
+            <h3 class="text-lg font-semibold mb-4">График средних позиций</h3>
+            <div id="chart-container" style="width: 100%; height: 400px;">
+                <div id="tooltip" class="absolute hidden bg-gray-800 text-white p-2 rounded shadow-lg text-sm"></div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Ключевое слово
+                        </th>
+                        {% for date in check_dates|reverse %}
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {{ date }}<br>
+                            <span class="text-xs text-gray-400">Яндекс</span>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <!-- Строка со средними значениями -->
+                    <tr class="bg-blue-50 font-semibold border-b-2 border-blue-200">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-900">
+                            Среднее
+                        </td>
+                        {% for date in check_dates|reverse %}
+                        {% set positions_for_date = [] %}
+                        {% set total_change = 0 %}
+                        {% set changes_count = 0 %}
+                        {% for kw in positions_data.keys() %}
+                            {% if positions_data[kw][date]['position'] is not none %}
+                                {% set _ = positions_for_date.append(positions_data[kw][date]['position']) %}
+                                {% if loop.first and positions_data[kw][date]['change'] is not none %}
+                                    {% set total_change = total_change + positions_data[kw][date]['change'] %}
+                                    {% set changes_count = changes_count + 1 %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-900">
+                            {% if positions_for_date|length > 0 %}
+                                {{ "%.1f"|format(positions_for_date|sum / positions_for_date|length) }}
+                                {% if loop.first and changes_count > 0 %}
+                                    {% set avg_change = total_change / changes_count %}
+                                    <small class="{% if avg_change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {% if avg_change > 0 %}↑{% else %}↓{% endif %}{{ "%.1f"|format(avg_change|abs) }}
+                                    </small>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+
+                    {% for keyword in positions_data.keys()|sort %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ keyword }}
+                        </td>
+                        {% for date in check_dates|reverse %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if positions_data[keyword][date] %}
+                                {{ "%.1f"|format(positions_data[keyword][date]['position']) }}
+                                {% if loop.first %}
+                                    {% if positions_data[keyword][date]['change'] is not none %}
+                                        <small class="{% if positions_data[keyword][date]['change'] > 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {% if positions_data[keyword][date]['change'] > 0 %}↑{% else %}↓{% endif %}{{ "%.1f"|format(positions_data[keyword][date]['change_value']) }}
+                                        </small>
+                                    {% endif %}
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Таблицы изменений -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Максимальный рост -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Максимальный рост позиций</h2>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead>
@@ -132,54 +214,32 @@
                             <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Ключевое слово
                             </th>
-                            {% for date in check_dates %}
                             <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                {{ date }}<br>
-                                {% with %}
-                                    {% set ns = namespace(found=false, period='') %}
-                                    {% for keyword in positions_data.keys() %}
-                                        {% if not ns.found and positions_data[keyword][date]['data_period'] %}
-                                            {% set ns.found = true %}
-                                            {% set ns.period = positions_data[keyword][date]['data_period'] %}
-                                        {% endif %}
-                                    {% endfor %}
-                                    {% if ns.found %}
-                                        <span class="text-xs text-gray-400">{{ ns.period }}</span>
-                                    {% endif %}
-                                {% endwith %}
+                                Предыдущая позиция
                             </th>
-                            {% endfor %}
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Текущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Изменение
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        <!-- Строка со средними значениями -->
-                        <tr class="bg-blue-50 font-semibold border-b-2 border-blue-200">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-900">
-                                Среднее
-                            </td>
-                            {% for date in check_dates %}
-                            {% set positions_for_date = [] %}
-                            {% for keyword in positions_data.keys() %}
-                                {% if positions_data[keyword][date]['position'] is not none %}
-                                    {% set _ = positions_for_date.append(positions_data[keyword][date]['position']) %}
-                                {% endif %}
-                            {% endfor %}
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-900">
-                                {{ "%.1f"|format(positions_for_date|sum / positions_for_date|length) if positions_for_date|length > 0 else '-' }}
-                            </td>
-                            {% endfor %}
-                        </tr>
-
-                        {% for keyword in positions_data.keys()|sort %}
+                        {% for item in biggest_improvements %}
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {{ keyword }}
+                                {{ item.keyword }}
                             </td>
-                            {% for date in check_dates %}
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ "%.1f"|format(positions_data[keyword][date]['position']) if positions_data[keyword][date]['position'] is not none else '-' }}
+                                {{ "%.1f"|format(item.previous_position) }}
                             </td>
-                            {% endfor %}
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.current_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                                +{{ "%.1f"|format(item.change) }}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -187,104 +247,53 @@
             </div>
         </div>
 
-        <!-- Таблицы изменений -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <!-- Максимальный рост -->
-            <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
-                <h2 class="text-xl font-semibold mb-4">Максимальный рост позиций</h2>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead>
-                            <tr>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Ключевое слово
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Предыдущая позиция
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Текущая позиция
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Изменение
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for item in biggest_improvements %}
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {{ item.keyword }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ "%.1f"|format(item.previous_position) }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ "%.1f"|format(item.current_position) }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                                    +{{ "%.1f"|format(item.change) }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Максимальное падение -->
-            <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
-                <h2 class="text-xl font-semibold mb-4">Максимальное падение позиций</h2>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead>
-                            <tr>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Ключевое слово
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Предыдущая позиция
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Текущая позиция
-                                </th>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Изменение
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for item in biggest_drops %}
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {{ item.keyword }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ "%.1f"|format(item.previous_position) }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ "%.1f"|format(item.current_position) }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                                    {{ "%.1f"|format(item.change) }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+        <!-- Максимальное падение -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+            <h2 class="text-xl font-semibold mb-4">Максимальное падение позиций</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Ключевое слово
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Предыдущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Текущая позиция
+                            </th>
+                            <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Изменение
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in biggest_drops %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ item.keyword }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.previous_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ "%.1f"|format(item.current_position) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                                {{ "%.1f"|format(item.change) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-    {% endif %}
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-    // Добавляем необходимые переменные для JavaScript
-    const projectId = {{ project.id }};
-    const csrfToken = '{{ csrf_token() }}';
-</script>
 <script src="{{ url_for('static', filename='js/filters.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -370,11 +379,11 @@
             spinner.classList.remove('hidden');
             this.disabled = true;
 
-            fetch(`/project/${projectId}/positions/refresh`, {
+            fetch(`/project/{{ project.id }}/positions/refresh`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': '{{ csrf_token() }}'
                 }
             })
             .then(response => {
@@ -399,8 +408,16 @@
         });
 
         document.getElementById('exportBtn').addEventListener('click', function() {
-            window.location.href = `/project/${projectId}/positions/export`;
+            window.location.href = `/project/{{ project.id }}/positions/export`;
         });
     });
 </script>
+<style>
+    .text-success {
+        color: #10B981; /* зеленый */
+    }
+    .text-danger {
+        color: #EF4444; /* красный */
+    }
+</style>
 {% endblock %}
