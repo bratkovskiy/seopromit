@@ -35,24 +35,6 @@
         <div class="bg-white shadow sm:rounded-lg">
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">Ключевые слова</h3>
-                <div class="flex space-x-2">
-                    <button id="refresh-positions-btn"
-                       onclick="refreshPositions({{ project.id }})"
-                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Обновить позиции
-                    </button>
-                    <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}"
-                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
-                        <span>Отчет</span>
-                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                    </a>
-                    <a href="{{ url_for('main.project_keywords', id=project.id) }}"
-                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        Управление
-                    </a>
-                </div>
             </div>
             <div class="border-t border-gray-200">
                 <div class="px-4 py-5 sm:px-6">
@@ -97,8 +79,32 @@
                             </dd>
                         </div>
                     </dl>
+                    <div class="mt-4 flex justify-end space-x-3">
+                        <a href="{{ url_for('main.project_positions_report', project_id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
+                            <span>Отчет по позициям</span>
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="{{ url_for('main.project_keywords', id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Управление
+                        </a>
+                        <button id="refresh-positions-btn"
+                                onclick="refreshPositions({{ project.id }})"
+                                class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                            Обновить позиции
+                        </button>
+                    </div>
                     {% else %}
                     <p class="text-sm text-gray-500">Ключевые слова пока не добавлены</p>
+                    <div class="mt-4 flex justify-end">
+                        <a href="{{ url_for('main.project_keywords', id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Управление
+                        </a>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -108,16 +114,6 @@
         <div class="bg-white shadow sm:rounded-lg">
             <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">URLs</h3>
-                <div class="flex space-x-2">
-                    <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
-                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Обновить данные
-                    </a>
-                    <a href="{{ url_for('main.project_urls', id=project.id) }}"
-                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        Управление
-                    </a>
-                </div>
             </div>
             <div class="border-t border-gray-200">
                 <div class="px-4 py-5 sm:px-6">
@@ -150,8 +146,31 @@
                             </dd>
                         </div>
                     </dl>
+                    <div class="mt-4 flex justify-end space-x-3">
+                        <a href="{{ url_for('main.traffic_report', project_id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700">
+                            <span>Отчет по трафику</span>
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="{{ url_for('main.project_urls', id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Управление
+                        </a>
+                        <a href="{{ url_for('main.refresh_project_data', id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                            Обновить данные
+                        </a>
+                    </div>
                     {% else %}
                     <p class="text-sm text-gray-500">URLs пока не добавлены</p>
+                    <div class="mt-4 flex justify-end">
+                        <a href="{{ url_for('main.project_urls', id=project.id) }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Управление
+                        </a>
+                    </div>
                     {% endif %}
                 </div>
             </div>

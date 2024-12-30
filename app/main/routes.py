@@ -797,7 +797,7 @@ def refresh_project_data(id):
                 if traffic is not None:
                     url_traffic = URLTraffic(
                         url_id=url.id,
-                        visitors=traffic,
+                        visits=traffic,
                         check_date=datetime.utcnow()
                     )
                     db.session.add(url_traffic)
@@ -1082,7 +1082,7 @@ def check_update_status(id):
                     os.remove(pid_file)
                 except OSError:
                     pass
-        
+
         if process_running:
             return jsonify({
                 'status': 'running',
@@ -1116,3 +1116,181 @@ def check_update_status(id):
             'status': 'error',
             'message': str(e)
         })
+
+@bp.route('/project/<int:project_id>/traffic/report')
+@login_required
+def traffic_report(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Получаем параметры фильтров
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    min_traffic = request.args.get('min_traffic', type=int)
+    url_filter = request.args.get('url_filter')
+
+    # Базовый запрос
+    query = (URLTraffic.query
+             .join(URL)
+             .filter(URL.project_id == project_id))
+
+    # Применяем фильтры
+    if date_from:
+        query = query.filter(URLTraffic.check_date >= datetime.strptime(date_from, '%Y-%m-%d'))
+    if date_to:
+        query = query.filter(URLTraffic.check_date <= datetime.strptime(date_to, '%Y-%m-%d'))
+    if url_filter:
+        url_filter = url_filter.replace('*', '%')
+        query = query.filter(URL.url.like(url_filter))
+
+    # Получаем все записи о трафике
+    traffic_records = query.order_by(URLTraffic.check_date.desc()).all()
+
+    # Группируем данные по URL и датам
+    traffic_data = {}
+    dates = set()
+    for record in traffic_records:
+        url = record.url.url
+        date = record.check_date.strftime('%Y-%m-%d')
+        dates.add(date)
+        
+        if url not in traffic_data:
+            traffic_data[url] = {}
+        traffic_data[url][date] = record.visits
+
+    # Сортируем даты
+    dates = sorted(list(dates))
+
+    # Формируем данные для таблицы
+    table_data = []
+    for url in sorted(traffic_data.keys()):
+        url_traffic = []
+        prev_value = None
+        
+        for date in dates:
+            value = traffic_data[url].get(date)
+            change = 0
+            change_value = ''
+            
+            if value is not None and prev_value is not None:
+                change = value - prev_value
+                change_value = f"{'+' if change > 0 else ''}{change}"
+            
+            url_traffic.append({
+                'value': value if value is not None else '-',
+                'change': change,
+                'change_value': change_value
+            })
+            
+            if value is not None:
+                prev_value = value
+        
+        # Применяем фильтр по минимальному трафику
+        if min_traffic is None or any(t['value'] != '-' and t['value'] >= min_traffic for t in url_traffic):
+            table_data.append({
+                'url': url,
+                'traffic': url_traffic
+            })
+
+    # Вычисляем средние значения
+    averages = []
+    for i in range(len(dates)):
+        values = [data['traffic'][i]['value'] for data in table_data 
+                 if data['traffic'][i]['value'] != '-']
+        avg = sum(values) / len(values) if values else 0
+        averages.append(round(avg, 1))
+
+    # Данные для графика
+    chart_data = {
+        'labels': dates,
+        'values': averages
+    }
+
+    return render_template('main/traffic_report.html',
+                         title='Отчет по трафику',
+                         project=project,
+                         dates=dates,
+                         traffic_data=table_data,
+                         averages=averages,
+                         chart_data=chart_data)
+
+@bp.route('/project/<int:project_id>/traffic/export')
+@login_required
+def export_traffic(project_id):
+    # Получаем те же данные, что и для отчета
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('У вас нет доступа к этому проекту', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    # Получаем параметры фильтров
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    min_traffic = request.args.get('min_traffic', type=int)
+    url_filter = request.args.get('url_filter')
+
+    # Базовый запрос
+    query = (URLTraffic.query
+             .join(URL)
+             .filter(URL.project_id == project_id))
+
+    # Применяем фильтры
+    if date_from:
+        query = query.filter(URLTraffic.check_date >= datetime.strptime(date_from, '%Y-%m-%d'))
+    if date_to:
+        query = query.filter(URLTraffic.check_date <= datetime.strptime(date_to, '%Y-%m-%d'))
+    if url_filter:
+        url_filter = url_filter.replace('*', '%')
+        query = query.filter(URL.url.like(url_filter))
+
+    # Получаем все записи о трафике
+    traffic_records = query.order_by(URLTraffic.check_date.desc()).all()
+
+    # Создаем Excel файл
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+
+    # Форматирование
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#F3F4F6',
+        'border': 1
+    })
+
+    # Записываем заголовки
+    worksheet.write(0, 0, 'URL', header_format)
+    worksheet.write(0, 1, 'Дата проверки', header_format)
+    worksheet.write(0, 2, 'Трафик', header_format)
+    worksheet.write(0, 3, 'Изменение', header_format)
+
+    # Записываем данные
+    row = 1
+    for record in traffic_records:
+        worksheet.write(row, 0, record.url.url)
+        worksheet.write(row, 1, record.check_date.strftime('%Y-%m-%d'))
+        worksheet.write(row, 2, record.visits)
+        
+        # Находим предыдущую запись для этого URL
+        prev_record = URLTraffic.query.join(URL).filter(
+            URL.id == record.url.id,
+            URLTraffic.check_date < record.check_date
+        ).order_by(URLTraffic.check_date.desc()).first()
+        
+        if prev_record:
+            change = record.visits - prev_record.visits
+            worksheet.write(row, 3, change)
+        
+        row += 1
+
+    workbook.close()
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'traffic_report_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )

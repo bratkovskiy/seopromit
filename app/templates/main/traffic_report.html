@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Отчет по трафику</h1>
+        <div class="flex space-x-4">
+            <button id="refreshDataBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
+                <span>Обновить данные</span>
+                <span id="refreshSpinner" class="ml-2 hidden">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+            </button>
+            <button id="exportExcelBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                Выгрузить в Excel
+            </button>
+            <a href="{{ url_for('main.project', id=project.id) }}" 
+               class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                Вернуться к проекту
+            </a>
+        </div>
+    </div>
+
+    <!-- График -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Динамика трафика</h2>
+        <div class="bg-white p-4 rounded-lg shadow">
+            <canvas id="trafficChart" style="width: 100%; height: 400px;"></canvas>
+        </div>
+    </div>
+
+    <!-- Таблица -->
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200" id="trafficTable">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                            URL
+                        </th>
+                        {% for date in dates %}
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {{ date }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <!-- Строка со средними значениями -->
+                    <tr class="bg-blue-50 font-semibold border-b-2 border-blue-200">
+                        <td class="px-6 py-4 text-sm font-medium text-blue-900">
+                            Среднее
+                        </td>
+                        {% for avg in averages %}
+                        <td class="px-6 py-4 text-sm font-medium text-blue-900">
+                            {{ avg }}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    <!-- Данные по URL -->
+                    {% for url_data in traffic_data %}
+                    <tr>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            <div class="break-words">{{ url_data.url }}</div>
+                        </td>
+                        {% for traffic in url_data.traffic %}
+                        <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span>{{ traffic.value }}</span>
+                                {% if loop.last and traffic.change != 0 %}
+                                <span class="ml-2 flex items-center {{ 'text-green-600' if traffic.change > 0 else 'text-red-600' }}">
+                                    {% if traffic.change > 0 %}
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                    </svg>
+                                    {% else %}
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                    </svg>
+                                    {% endif %}
+                                    <span class="ml-1">{{ traffic.change_value }}</span>
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация графика
+    const ctx = document.getElementById('trafficChart').getContext('2d');
+    const trafficChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ dates|tojson|safe }},
+            datasets: [
+                {
+                    label: 'Средний трафик',
+                    data: {{ averages|tojson|safe }},
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.1,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Динамика трафика'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Количество посещений'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Дата'
+                    }
+                }
+            }
+        }
+    });
+
+    // Обработчики событий для кнопок
+    document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+    document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+
+    // Функции для работы с данными
+    function refreshData() {
+        const spinner = document.getElementById('refreshSpinner');
+        spinner.classList.remove('hidden');
+
+        fetch(`/project/${projectId}/traffic/refresh`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            spinner.classList.add('hidden');
+            if (data.success) {
+                showNotification('success', 'Данные успешно обновлены');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showNotification('error', data.message || 'Ошибка при обновлении данных');
+            }
+        })
+        .catch(error => {
+            spinner.classList.add('hidden');
+            showNotification('error', 'Ошибка при обновлении данных');
+        });
+    }
+
+    function exportToExcel() {
+        window.location.href = `/project/${projectId}/traffic/export`;
+    }
+
+    function showNotification(type, message) {
+        // Реализация уведомлений
+    }
+
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    }
+});
+</script>
+{% endblock %}
